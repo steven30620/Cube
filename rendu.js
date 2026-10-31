@@ -454,20 +454,35 @@
     return new THREE.LatheGeometry([[0.0001, 0], [r, 0], [r, h - b], [r - b * 0.6, h - b * 0.25], [r - b, h], [0.0001, h]].map(([a, c]) => new THREE.Vector2(a, c)), 32);
   });
   // main en C : anneau vu de face, ouverture tournée vers le corps et un peu vers le haut
-  const geoMainFig = () => geo('mainFig', () => new THREE.TorusGeometry(21 * K, 11.5 * K, 16, 32, Math.PI * 1.5));
+  /** Main de brique : pince en C épaisse (secteur d'anneau extrudé, faces plates, arêtes adoucies),
+   *  ouverture d'environ 70° centrée sur l'axe +x, trou traversant comme sur la vraie pièce. */
+  const geoMainFig = () => geo('mainFig2', () => {
+    const Ro = 28.5 * K, Ri = 16.5 * K, ouverture = 1.9, a0 = ouverture / 2, a1 = TAU - ouverture / 2;
+    const sh = new THREE.Shape();
+    sh.absarc(0, 0, Ro, a0, a1, false);
+    sh.absarc(0, 0, Ri, a1, a0, true);
+    sh.closePath();
+    const ep = 22 * K, b = 3.2 * K;
+    const g = new THREE.ExtrudeGeometry(sh, { depth: ep - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: 2.4 * K, bevelSegments: 4, curveSegments: 40 });
+    g.translate(0, 0, -(ep - 2 * b) / 2); g.computeVertexNormals();
+    return g;
+  });
+  /** Pose d'une main : ouverture tournée vers le corps et un peu vers le haut, pince inclinée vers l'avant. */
+  function poserMain(main, s) {
+    main.position.set(s * 24 * K, -62 * K, 30 * K);
+    main.rotation.set(-0.25, s * 0.15, s < 0 ? -0.6 : Math.PI + 0.6);
+  }
   /** Un bras : épaule arrondie, bras qui s'écarte légèrement, avant-bras vers l'avant, main en C. */
   function brasFig(b, s, m, mMain) {
     sph(b, 30 * K, m, 0, 0, 0, 24);
-    const coude = new THREE.Vector3(s * 26 * K, -100 * K, 0);
-    const haut = cyl(b, 27 * K, 29 * K, 100 * K, 24, m, coude.x / 2, coude.y / 2, 0); haut.rotation.z = Math.atan2(coude.x, -coude.y) * 1;
+    const coude = new THREE.Vector3(s * 24 * K, -88 * K, 0);
+    const haut = cyl(b, 27 * K, 29 * K, 92 * K, 24, m, coude.x / 2, coude.y / 2, 0); haut.rotation.z = Math.atan2(coude.x, -coude.y);
     const gc = groupe(b, coude.x, coude.y, 0);
     sph(gc, 28 * K, m, 0, 0, 0, 24);
-    const avant = cyl(gc, 27 * K, 25 * K, 48 * K, 24, m, s * 3 * K, -10 * K, 22 * K); avant.rotation.x = Math.PI / 2 - 0.35;
-    const poignet = cyl(gc, 10 * K, 10 * K, 20 * K, 14, mMain, s * 22 * K, -24 * K, 42 * K); poignet.rotation.z = s * 0.6;
+    const avant = cyl(gc, 27 * K, 24 * K, 46 * K, 24, m, s * 4 * K, -19 * K, 13 * K); avant.rotation.x = -0.6;
+    const poignet = cyl(gc, 9.5 * K, 9.5 * K, 20 * K, 14, mMain, s * 13 * K, -44 * K, 26 * K); poignet.rotation.set(-0.6, 0, s * 0.5); // poignet qui entre dans la main
     const main = new THREE.Mesh(geoMainFig(), mMain);
-    main.position.set(s * 30 * K, -34 * K, 44 * K);
-    // l'arc va de 0 à 270° : l'ouverture est centrée sur -45°. On la tourne vers le corps et un peu vers le haut.
-    main.rotation.set(-0.3, s * 0.25, s < 0 ? 1.13 : 3.58);
+    poserMain(main, s);
     gc.add(main);
     return gc;
   }
@@ -557,12 +572,12 @@
     const bG = groupe(corps, -xEpaule, yEpaule, 0), bD = groupe(corps, xEpaule, yEpaule, 0);
     for (const [b, s] of [[bG, -1], [bD, 1]]) {
       bloc(b, 56 * K, 48 * K, 64 * K, mO, s * 8 * K, 4 * K, 0, 14 * K); // épaulette arrondie
-      const haut = cyl(b, 20 * K, 22 * K, 84 * K, 18, mO, s * 16 * K, -56 * K, 0); haut.rotation.z = s * 0.25;
-      const gc = groupe(b, s * 26 * K, -100 * K, 0);
+      const haut = cyl(b, 20 * K, 22 * K, 80 * K, 18, mO, s * 14 * K, -50 * K, 0); haut.rotation.z = s * 0.27;
+      const gc = groupe(b, s * 24 * K, -88 * K, 0);
       sph(gc, 23 * K, mO, 0, 0, 0, 18);
-      const avant = cyl(gc, 19 * K, 20 * K, 48 * K, 18, mO, s * 3 * K, -10 * K, 22 * K); avant.rotation.x = Math.PI / 2 - 0.35;
-      const main = new THREE.Mesh(geoMainFig(), mO); main.position.set(s * 30 * K, -34 * K, 44 * K);
-      main.rotation.set(-0.3, s * 0.25, s < 0 ? 1.13 : 3.58); gc.add(main);
+      const avant = cyl(gc, 19 * K, 18 * K, 46 * K, 18, mO, s * 4 * K, -19 * K, 13 * K); avant.rotation.x = -0.6;
+      cyl(gc, 9 * K, 9 * K, 20 * K, 12, mO, s * 13 * K, -44 * K, 26 * K).rotation.set(-0.6, 0, s * 0.5);
+      const main = new THREE.Mesh(geoMainFig(), mO); poserMain(main, s); gc.add(main);
     }
     // crâne imprimé
     const tete = groupe(corps, 0, FIG.yTete + FIG.teteH / 2, 0);
