@@ -10,6 +10,7 @@
   const dormir = ms => new Promise(r => setTimeout(r, ms));
   const avecDelai = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('délai')), ms))]);
   const ONGLET = Math.random().toString(36).slice(2, 10);
+  const journal = (txt, t0) => { try { console.info('[Cube] ' + txt + ' — ' + Math.round(performance.now() - t0) + ' ms'); } catch (e) { /* */ } };
   const INSTANCES = ['cube-01', 'cube-02', 'cube-03', 'cube-04', 'cube-05', 'cube-06', 'cube-07', 'cube-08', 'cube-09'];
   const NOMS_STATS = { force: 'Force', agilite: 'Agilité', intelligence: 'Intelligence', discipline: 'Discipline', sangFroid: 'Sang-froid' };
   const STATUTS = { captif: 'Captif', cube: 'Dans le Cube', mort: 'Mort dans le Cube', evade: 'Évadé' };
@@ -26,9 +27,21 @@
     async init() {
       for (let i = 0; i < 20 && !(window.claude && window.claude.use); i++) await dormir(100);
       if (!(window.claude && window.claude.use)) return;
-      const [u, d, r] = await Promise.all(['user', 'db', 'room'].map(n => avecDelai(window.claude.use(n), 11000).catch(() => null)));
-      this.user = u; this.db = d; this.room = r;
-      if (u) { try { this.uid = await u.id(); } catch (e) { this.uid = null; } try { const c = await u.can('data.write'); if (c === false) this.peutEcrire = false; } catch (e) { /* inconnu */ } }
+      const t0 = performance.now();
+      const prendre = n => avecDelai(window.claude.use(n), 11000).catch(() => null);
+      // la salle temps réel ne bloque pas le chargement du pavillon
+      this.pRoom = prendre('room').then(r => { this.room = r; journal('room ' + (r ? 'prête' : 'absente'), t0); return r; });
+      const [u, d] = await Promise.all([prendre('user'), prendre('db')]);
+      this.user = u; this.db = d;
+      journal('user ' + (u ? 'ok' : 'absent') + ', db ' + (d ? 'ok' : 'absente'), t0);
+      if (u) {
+        for (let essai = 0; essai < 3 && !this.uid; essai++) {
+          try { this.uid = await avecDelai(Promise.resolve(u.id()), 4000); } catch (e) { this.uid = null; }
+          if (!this.uid) await dormir(700);
+        }
+        journal('identité ' + (this.uid ? 'reçue' : 'non reçue'), t0);
+        Promise.resolve(u.can('data.write')).then(c => { if (c === false) this.peutEcrire = false; }).catch(() => {});
+      }
       if (this.db && this.uid) this.synchroniserHorloge();
     },
     async synchroniserHorloge() {
@@ -41,10 +54,11 @@
       } catch (e) { /* horloge locale */ }
     },
     async rejoindre(nom) {
+      if (!this.room && this.pRoom) await avecDelai(this.pRoom, 4000).catch(() => null);
       if (!this.room) return null;
       try {
         this.quitterSalon();
-        const s = await avecDelai(Promise.resolve(this.room.join(nom)), 11000);
+        const s = await avecDelai(Promise.resolve(this.room.join(nom)), 6000);
         this.salon = s;
         s.onPeers(() => {}, () => {});
         s.on('piege', m => { if (m && !m.sameTab) J.recevoirPiege(m.data, m); }, () => {});
@@ -79,7 +93,7 @@
     return f.enCours;
   }
   async function lireDoc(chemin) {
-    if (N.db && N.uid) { try { const s = await avecDelai(N.db.doc(chemin).get(), 10000); return s.exists ? s.data() : null; } catch (e) { return null; } }
+    if (N.db && N.uid) { try { const s = await avecDelai(N.db.doc(chemin).get(), 7000); return s.exists ? s.data() : null; } catch (e) { return null; } }
     return Local.lire(chemin);
   }
   const Local = {
@@ -99,14 +113,14 @@
   const D = { coffre: null, persos: null, tentative: null, reglages: null, carnets: {} };
   const coffreVide = () => ({ monnaies: { or: 0, orNoir: 0, jetons: 0 }, objets: {}, journal: [] });
   async function chargerJoueur() {
-    D.coffre = (await lireDoc(cheminJoueur('coffre'))) || coffreVide();
+    // les quatre lectures partent en même temps
+    const [co, p, te, re] = await Promise.all(['coffre', 'personnages', 'tentative', 'reglages'].map(k => lireDoc(cheminJoueur(k))));
+    D.coffre = co || coffreVide();
     D.coffre.monnaies = Object.assign({ or: 0, orNoir: 0, jetons: 0 }, D.coffre.monnaies || {});
     D.coffre.objets = D.coffre.objets || {}; D.coffre.journal = D.coffre.journal || [];
-    const p = await lireDoc(cheminJoueur('personnages'));
     D.persos = (p && p.liste) || [];
-    D.tentative = await lireDoc(cheminJoueur('tentative'));
-    if (D.tentative && !D.tentative.perso) D.tentative = null;
-    D.reglages = Object.assign({ bloques: [], chatMasque: false, son: true }, (await lireDoc(cheminJoueur('reglages'))) || {});
+    D.tentative = te && te.perso ? te : null;
+    D.reglages = Object.assign({ bloques: [], chatMasque: false, son: true }, re || {});
     // crédits en attente (si une écriture du Coffre a échoué)
     try { const att = JSON.parse(localStorage.getItem('cube-credits-attente') || '[]'); if (att.length) { att.forEach(a => appliquerCredit(a)); localStorage.removeItem('cube-credits-attente'); sauverCoffre(); } } catch (e) { /* */ }
     if (!D.persos.length) { D.persos.push(nouveauPerso('Akira')); sauverPersos(); }
@@ -160,9 +174,9 @@
       if (!d || !d.graine) {
         try {
           const l = await avecDelai(ref.acquire({ holder: (N.uid || 'x') + ONGLET, ttlMs: 4000 }), 6000);
-          const s = await ref.get(); d = s.exists ? s.data() : null;
-          if ((!d || !d.graine) && l && l.acquired) { d = { graine: (Math.random() * 2 ** 31) >>> 0, t0: N.maintenant(), nom, cree: new Date(N.maintenant()).toISOString() }; await ref.set(d); }
-          else if (!d || !d.graine) { await dormir(1500); const s2 = await ref.get(); d = s2.exists ? s2.data() : null; }
+          const s = await avecDelai(ref.get(), 7000); d = s.exists ? s.data() : null;
+          if ((!d || !d.graine) && l && l.acquired) { d = { graine: (Math.random() * 2 ** 31) >>> 0, t0: N.maintenant(), nom, cree: new Date(N.maintenant()).toISOString() }; await avecDelai(ref.set(d), 7000); }
+          else if (!d || !d.graine) { await dormir(1500); const s2 = await avecDelai(ref.get(), 7000); d = s2.exists ? s2.data() : null; }
         } catch (e) { /* repli local */ }
       }
       if (d && d.graine) {
@@ -381,18 +395,23 @@
     initRendu();
     let reprise = D.tentative && D.tentative.perso === persoId ? D.tentative : null;
     let inst = reprise ? reprise.inst : null;
+    const t0 = performance.now();
     if (!inst) {
+      afficherChargement('Connexion au Cube…');
       for (const nom of INSTANCES) {
         const s = await N.rejoindre(nom);
         if (!s) { inst = nom; break; }
-        await dormir(1200);
+        await dormir(700); // les présents se signalent en moins d'une seconde
         const n = N.peers.filter(p => !estMoi(p) && lirePeer(p).v === 1).length;
         if (n < CF.MAX_JOUEURS_INSTANCE) { inst = nom; break; }
       }
       inst = inst || INSTANCES[INSTANCES.length - 1];
     } else await N.rejoindre(inst);
-    if (!N.salon) await N.rejoindre(inst);
+    journal('salle temps réel ' + (N.salon ? 'rejointe' : 'indisponible'), t0);
+    afficherChargement('Le mécanisme s’ouvre…');
     await ouvrirInstance(inst);
+    journal('instance ' + inst + ' ouverte', t0);
+    if (!N.salon) N.rejoindre(inst); // nouvel essai en arrière-plan, sans faire attendre
     J.monde = C.creerMonde(I.graine, I.t0);
     J.perso = perso;
     J.memoire = { salles: new Map() };
@@ -417,8 +436,14 @@
     J.cube = cube;
     J.joueur = { x, z, aMonde: Math.PI, vivant: true, pas: 0, vitesse: 0, traversee: null, montee: null, attente: false, sur: {} };
     construireSalleCourante(true);
-    J.carnet = (await lireDoc(cheminJoueur('carnet-' + perso.id))) || { entrees: [], notes: '' };
-    $('#carnet-notes').value = J.carnet.notes || '';
+    // le carnet se charge en arrière-plan : on n'attend pas pour entrer
+    J.carnet = { entrees: [], notes: '' }; $('#carnet-notes').value = '';
+    lireDoc(cheminJoueur('carnet-' + perso.id)).then(c => {
+      if (!c || !J.perso || J.perso.id !== perso.id) return;
+      J.carnet = { entrees: J.carnet.entrees.concat(c.entrees || []).slice(0, 300), notes: c.notes || '' };
+      if (J.panneau !== 'carnet') $('#carnet-notes').value = J.carnet.notes;
+    });
+    journal('première salle prête', t0);
     noterSalle();
     J.mode = 'jeu';
     document.body.dataset.ecran = 'jeu';
@@ -1464,7 +1489,7 @@
       li.appendChild(info); l.appendChild(li);
     });
     rendreCoffre($('#coffre-menu'));
-    $('#mode-reseau').textContent = N.db && N.uid ? (N.peutEcrire ? 'Cube partagé : les corps, objets et rencontres sont communs à tous les visiteurs de cette page.' : 'Lecture seule : demande un accès Contributeur pour laisser une trace dans le Cube.') : 'Hors ligne : le Cube et ton Coffre sont enregistrés sur cet appareil seulement.';
+    $('#mode-reseau').textContent = N.db && !N.uid ? 'Identité non reçue : ton Coffre et tes captifs restent sur cet appareil. Recharge la page pour réessayer.' : N.db && N.uid ? (N.peutEcrire ? 'Cube partagé : les corps, objets et rencontres sont communs à tous les visiteurs de cette page.' : 'Lecture seule : demande un accès Contributeur pour laisser une trace dans le Cube.') : 'Hors ligne : le Cube et ton Coffre sont enregistrés sur cet appareil seulement.';
   }
   const causeTexte = c => ({ pointes: 'transpercé', lames: 'tranché', tranche: 'tranché', ecrase: 'écrasé', brule: 'brûlé', fleches: 'flèches', chute: 'chute', scie: 'lame circulaire', broye: 'broyé', epuisement: 'épuisement' }[c] || c);
   function rendreCoffre(cont) {
