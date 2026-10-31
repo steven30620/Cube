@@ -495,6 +495,7 @@
     requestAnimationFrame(boucle);
     const tr = performance.now(), dt = Math.min(0.05, (tr - tPrec) / 1000); tPrec = tr;
     if (J.mode !== 'jeu' && J.mode !== 'cinematique') return;
+    if (J.mode === 'jeu') lireManette();
     const t = N.maintenant();
     const it = C.instant(J.monde, t);
     J.it = it;
@@ -699,10 +700,12 @@
     if (k.KeyS || k.ArrowDown) iz += 1;
     if (k.KeyA || k.KeyQ || k.ArrowLeft) ix -= 1;
     if (k.KeyD || k.ArrowRight) ix += 1;
-    const cr = J.croix;
-    if (cr.haut) iz -= 1; if (cr.bas) iz += 1; if (cr.gauche) ix -= 1; if (cr.droite) ix += 1;
+    for (const cr of [J.croix, J.manette]) {
+      if (!cr) continue;
+      if (cr.haut) iz -= 1; if (cr.bas) iz += 1; if (cr.gauche) ix -= 1; if (cr.droite) ix += 1;
+    }
     const n = Math.hypot(ix, iz);
-    const court = (k.ShiftLeft || k.ShiftRight) && n > 0;
+    const court = (k.ShiftLeft || k.ShiftRight || J.courirB) && n > 0;
     const v = (3.4 + J.perso.stats.agilite * 0.022) * (court ? 1.6 : 1) * (J.salle.traits.chaines && ctx.fort ? 0.85 : 1);
     if (n < 0.05) { jo.vitesse *= 0.8; return; }
     ix /= Math.max(1, n); iz /= Math.max(1, n);
@@ -1068,7 +1071,7 @@
   function libelle(i) {
     switch (i.type) {
       case 'plaque': return 'Examiner la plaque de la porte';
-      case 'centre': { const h = J.portes[4], b = J.portes[5]; if (h && b) return 'Monter (E) · Descendre (F)'; if (h) return 'Monter à l’échelle'; if (b) return 'Descendre par la trappe'; return 'Examiner le médaillon'; }
+      case 'centre': { const h = J.portes[4], b = J.portes[5]; if (h && b) return 'Monter (A) · Descendre (B)'; if (h) return 'Monter à l’échelle'; if (b) return 'Descendre par la trappe'; return 'Examiner le médaillon'; }
       case 'objet': return 'Ramasser : ' + (i.obj.nom || C.OBJETS[i.obj.type].nom);
       case 'corps': return 'Examiner le corps';
       case 'trait': return 'Examiner : ' + i.nom;
@@ -1646,14 +1649,43 @@
       try { await navigator.clipboard.writeText(txt); $('#btn-copier-coffre').textContent = 'Copié'; } catch (e) { $('#btn-copier-coffre').textContent = 'Copie refusée'; }
       setTimeout(() => { $('#btn-copier-coffre').textContent = 'Copier le Coffre (JSON)'; }, 1800);
     });
-    // commandes tactiles
-    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
-      document.body.classList.add('tactile');
-      $('#tact-e').addEventListener('click', () => { if (J.panneau === 'texte' || J.panneau === 'plaque') fermerPanneaux(); else interagir(false); });
-      $('#tact-f').addEventListener('click', () => interagir(true));
-    }
+    // boutons A et B à l'écran (souris ou doigt)
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.body.classList.add('tactile');
+    [['#btn-a', boutonA], ['#btn-b', boutonB]].forEach(([sel, f]) => {
+      const b = $(sel);
+      b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('actif'); A.init(); try { b.setPointerCapture(e.pointerId); } catch (er) { /* */ } f(true); });
+      const fin = () => { if (!b.classList.contains('actif')) return; b.classList.remove('actif'); f(false); };
+      ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => b.addEventListener(ev, fin));
+      b.addEventListener('contextmenu', e => e.preventDefault());
+    });
   }
-  function relacherCroix() { Object.keys(J.croix).forEach(k => { J.croix[k] = false; }); document.querySelectorAll('#croix .dir').forEach(b => b.classList.remove('actif')); }
+  // A : comme E (interagir ; maintenu, il soulève une herse)
+  function boutonA(appui) {
+    if (J.mode !== 'jeu') return;
+    J.touches.KeyE = appui;
+    if (!appui) { J.herseMaintien = 0; return; }
+    if (J.panneau === 'texte' || J.panneau === 'plaque') fermerPanneaux(); else interagir(false);
+  }
+  // B : fermer un panneau ; sur le médaillon, descendre ; ailleurs, courir tant qu'il est maintenu
+  function boutonB(appui) {
+    if (J.mode !== 'jeu') return;
+    if (!appui) { J.courirB = false; return; }
+    if (J.panneau) { fermerPanneaux(); return; }
+    if (J.interaction && J.interaction.type === 'centre' && J.portes && J.portes[5]) { interagir(true); return; }
+    J.courirB = true;
+  }
+  // manette de jeu branchée (API Gamepad) : croix ou stick gauche, A (0) et B (1)
+  function lireManette() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    let gp = null; for (const p of pads) if (p && p.connected) { gp = p; break; }
+    if (!gp) { J.manette = null; return; }
+    const b = i => !!(gp.buttons[i] && gp.buttons[i].pressed), ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
+    J.manette = { haut: b(12) || ay < -0.45, bas: b(13) || ay > 0.45, gauche: b(14) || ax < -0.45, droite: b(15) || ax > 0.45 };
+    const a = b(0), bb = b(1);
+    if (a !== !!J.manA) { J.manA = a; boutonA(a); }
+    if (bb !== !!J.manB) { J.manB = bb; boutonB(bb); }
+  }
+  function relacherCroix() { J.courirB = false; Object.keys(J.croix).forEach(k => { J.croix[k] = false; }); document.querySelectorAll('#croix .dir').forEach(b => b.classList.remove('actif')); }
   function majReste() { let tot = 0; Object.keys(NOMS_STATS).forEach(k => { const v = +$('#recrue-' + k).value; tot += v; $('#recrue-' + k + '-v').textContent = v; }); $('#recrue-reste').textContent = tot <= 250 ? 'Points restants : ' + (250 - tot) : 'Trop de points : ' + tot + ' / 250.'; }
   function ouvrirAide() { fermerPanneaux(); J.panneau = 'aide'; $('#panneau-aide').hidden = false; }
 

@@ -193,13 +193,18 @@
   #croix .dir[data-dir="haut"] { grid-area: h; } #croix .dir[data-dir="bas"] { grid-area: b; }
   #croix .dir[data-dir="gauche"] { grid-area: g; } #croix .dir[data-dir="droite"] { grid-area: d; }
   #croix .point { grid-area: p; place-self: center; width: 13px; height: 13px; border-radius: 50%; background: var(--or-pale); }
-  @media (max-width: 900px) { #chat { bottom: auto; top: 66px; width: 210px; } #chat-liste { max-height: 84px; } }
+  @media (max-width: 1100px) { #chat { bottom: auto; top: 66px; width: 210px; } #chat-liste { max-height: 84px; } }
   @media (max-width: 600px) { .barre .btn kbd { display: none; } .barre .btn { font-size: .74rem; padding: .3em .55em; } .identite b { font-size: .95rem; } .identite canvas { width: 30px; height: 35px; } #chat { top: 112px; width: 190px; } }
   @media (max-width: 480px) { #croix { grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px); } #croix .dir { width: 52px; height: 52px; } #invite { bottom: 186px; } }
   /* ---------- tactile : boutons d'action ---------- */
-  #tact-e, #tact-f { display: none; }
-  body.tactile[data-ecran="jeu"] #tact-e, body.tactile[data-ecran="jeu"] #tact-f { display: block; position: fixed; z-index: 12; width: 64px; height: 64px; border-radius: 50%; }
-  body.tactile #tact-e { right: 18px; bottom: 20px; } body.tactile #tact-f { right: 18px; bottom: 96px; }
+  /* ---------- boutons A et B (à droite de la manette) ---------- */
+  #boutons-ab { left: calc(50% + 116px); bottom: 26px; width: 146px; height: 128px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #boutons-ab .ab { position: absolute; width: 62px; height: 62px; border-radius: 50%; padding: 0; display: grid; place-items: center; font-family: var(--f-titre); font-weight: 800; font-size: 1.55rem; line-height: 1; cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent; transition: transform .08s, filter .08s; }
+  #btn-a { right: 0; top: 0; background: var(--cinabre); color: #f6e7c8; border: 3px solid #e7a99c; }
+  #btn-b { left: 0; bottom: 0; background: rgba(5,5,5,.62); color: var(--or-pale); border: 3px solid var(--or-pale); }
+  #boutons-ab .ab.actif { transform: scale(.92); filter: brightness(1.3); }
+  @media (max-width: 760px) { #croix { left: 12px; transform: none; } #boutons-ab { left: auto; right: 10px; bottom: 18px; } }
+  @media (max-width: 480px) { #boutons-ab { width: 132px; height: 118px; } #boutons-ab .ab { width: 56px; height: 56px; } }
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
@@ -272,7 +277,7 @@
     <button type="button" class="btn" id="btn-quitter">Quitter</button>
   </div>
 </div>
-<div class="hud" id="invite" hidden><kbd>E</kbd><span id="invite-txt"></span></div>
+<div class="hud" id="invite" hidden><kbd>A</kbd><span id="invite-txt"></span></div>
 <div class="hud" id="message" aria-live="polite"></div>
 <div class="hud" id="chat">
   <div id="chat-entete"><span>Voix dans la salle</span><button type="button" class="mini" id="btn-chat">Masquer / afficher</button></div>
@@ -286,8 +291,10 @@
   <button type="button" class="dir" data-dir="droite" aria-label="Droite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12 6 20V4Z"/></svg></button>
   <button type="button" class="dir" data-dir="bas" aria-label="Bas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19 4 6h16Z"/></svg></button>
 </div>
-<button type="button" class="btn or hud" id="tact-e">E</button>
-<button type="button" class="btn hud" id="tact-f">F</button>
+<div class="hud" id="boutons-ab" role="group" aria-label="Boutons A et B">
+  <button type="button" class="ab" id="btn-a" aria-label="A : interagir">A</button>
+  <button type="button" class="ab" id="btn-b" aria-label="B : courir, descendre ou fermer">B</button>
+</div>
 
 <!-- ===================== PANNEAUX ===================== -->
 <section class="panneau" id="panneau-plaque" hidden aria-label="Plaque de la porte">
@@ -340,6 +347,9 @@
     <dt><kbd>I</kbd></dt><dd>Coffre</dd>
     <dt><kbd>Entrée</kbd></dt><dd>Parler aux personnes présentes dans la salle</dd>
     <dt><kbd>Échap</kbd></dt><dd>Fermer un panneau</dd>
+    <dt>Bouton <kbd>A</kbd></dt><dd>Comme <kbd>E</kbd> : interagir, examiner, ramasser, monter (maintenir pour une herse)</dd>
+    <dt>Bouton <kbd>B</kbd></dt><dd>Fermer un panneau ; sur le médaillon, descendre par la trappe ; ailleurs, courir tant qu’il est maintenu</dd>
+    <dt>Manette branchée</dt><dd>Croix ou stick gauche pour se déplacer, A et B comme à l’écran</dd>
   </dl>
 </section>
 
