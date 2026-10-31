@@ -320,6 +320,7 @@
         case 'engrenage': case 'roulement': this.bruit('brun', 0.5, 160, 0, 0.12 * k); break;
         case 'scie': this.bruit('blanc', 0.4, 4200, 5, 0.06 * k); break;
         case 'frottement': this.bruit('brun', 0.6, 260, 0, 0.18 * k); break;
+        case 'ralenti': for (let i = 0; i < 6; i++) { this.ton('sine', 52, 38, 0.35, 0.22 * k, i * 1.05); this.ton('sine', 48, 36, 0.3, 0.16 * k, i * 1.05 + 0.28); } this.bruit('brun', 6.5, 120, 0, 0.25 * k); break;
         case 'liberte': [523, 659, 784, 1046].forEach((f, i) => this.ton('sine', f, 0, 3.5, 0.08, i * 0.35)); break;
       }
     },
@@ -434,7 +435,7 @@
       if (perso.tentatives.length > 30) perso.tentatives.length = 30;
       sauverPersos(); sauverTentative();
     }
-    J.cube = cube;
+    J.cube = cube; J.trace = []; J.ralenti = null;
     J.joueur = { x, z, aMonde: Math.PI, vivant: true, pas: 0, vitesse: 0, traversee: null, montee: null, attente: false, sur: {} };
     construireSalleCourante(true);
     // le carnet se charge en arrière-plan : on n'attend pas pour entrer
@@ -618,6 +619,12 @@
       if (jo.vivant) J.figJoueur.racine.rotation.y = jo.aMonde - rotY;
     }
     if (jo.vivant) J.figJoueur.animer(jo.pas, jo.vitesse);
+    // trace des 4 dernières secondes (pour le ralenti de la mort)
+    if (jo.vivant && !jo.traversee && !jo.montee) {
+      const tr = J.trace || (J.trace = []);
+      tr.push({ t, x: jo.x, z: jo.z, a: jo.aMonde - rotY, pas: jo.pas, v: jo.vitesse, c: J.cube });
+      while (tr.length && t - tr[0].t > 4000) tr.shift();
+    }
     // --- autres joueurs
     majDistants(t, dt);
     // --- caméra
@@ -1355,6 +1362,7 @@
   function mourir(cause, t, piege) {
     const jo = J.joueur; if (!jo.vivant) return;
     jo.vivant = false; J.mortAnim = t; J.causeMort = cause; J.piegeMort = piege || null;
+    preparerRalenti(t);
     A.jouer('mort');
     $('#invite').hidden = true; fermerPanneaux();
     publierPresence(true);
@@ -1386,6 +1394,7 @@
     J.mode = 'cinematique'; J.cin = { type, debut: performance.now(), depCam: camera.position.clone(), cible: cible.clone() };
     document.documentElement.style.setProperty('--k', '0');
     document.body.dataset.cinematique = type;
+    if (J.figJoueur && J.figJoueur.anneau) J.figJoueur.anneau.visible = false;
     $('#cinematique').hidden = false;
     $('#cin-titre').textContent = type === 'mort' ? '' : 'LIBRE';
     $('#cin-l1').textContent = type === 'mort' ? J.perso.nom + ' ne quittera pas le Cube.' : J.perso.nom + ' a franchi la dernière porte.';
@@ -1404,10 +1413,17 @@
     const c = J.cin, k = clamp((performance.now() - c.debut) / CIN_MS, 0, 1);
     if (J.salle) placerGroupe(J.salle.groupe, J.salle.id, it);
     if (c.type === 'mort') {
+      const ecoule = performance.now() - c.debut, rp = J.ralenti;
+      if (rp && ecoule < rp.dureeReelle) { majRalenti(rp, ecoule); document.documentElement.style.setProperty('--k', '0'); return; }
+      if (rp && !rp.fini) finirRalenti(rp);
+      const k2 = rp ? clamp((ecoule - rp.dureeReelle) / (CIN_MS - rp.dureeReelle), 0, 1) : k;
       const wp = new THREE.Vector3(); J.figJoueur.racine.getWorldPosition(wp);
-      const a = k * 0.9, dist = 5.5 - k * 2;
-      camera.position.set(wp.x + Math.sin(a) * dist, wp.y + 11 - k * 4, wp.z + Math.cos(a) * dist); camera.lookAt(wp);
-      for (const p of J.salle.pieges) { try { p.maj(t, J.salle.ctxPiege); } catch (e) { /* */ } }
+      const a = k2 * 0.9, dist = 5.5 - k2 * 2;
+      camera.position.set(wp.x + Math.sin(a) * dist, wp.y + 11 - k2 * 4, wp.z + Math.cos(a) * dist); camera.lookAt(wp);
+      for (const p of J.salle.pieges) { try { p.maj(t, ctxPour(J.salle, t, it)); } catch (e) { /* */ } }
+      document.documentElement.style.setProperty('--k', k2.toFixed(3));
+      if (k >= 1) finTentative();
+      return;
     } else {
       const fig = J.figJoueur;
       const dir = new THREE.Vector3(); const [lx, lz] = R.localDepuisFace(J.faceSortie, 0, -1); dir.set(lx, 0, lz).applyQuaternion(J.salle.groupe.quaternion).normalize();
@@ -1423,7 +1439,69 @@
     document.documentElement.style.setProperty('--k', k.toFixed(3));
     if (k >= 1) finTentative();
   }
+  // ---------- ralenti de la mort, sous un autre angle ----------
+  // Les pièges suivent l'horloge du Cube : on rejoue fidèlement les 2 dernières secondes.
+  const RALENTI_VITESSE = 0.37, RALENTI_AVANT = 2000, RALENTI_APRES = 450;
+  function preparerRalenti(tMort) {
+    const tr = (J.trace || []).filter(e => e.c === J.cube);
+    const jo = J.joueur;
+    // mort juste en arrivant : on rejoue quand même, le personnage reste à sa place
+    if (!tr.length) tr.push({ t: tMort, x: jo.x, z: jo.z, a: jo.aMonde - (J.salle ? J.salle.groupe.rotation.y : 0), pas: jo.pas, v: 0, c: J.cube });
+    const tDebut = tMort - RALENTI_AVANT;
+    const der = tr[tr.length - 1];
+    J.ralenti = {
+      buffer: tr.slice(), tDebut, tFin: tMort, dureeReelle: Math.min(7000, (tMort + RALENTI_APRES - tDebut) / RALENTI_VITESSE),
+      a0: der.a + 0.75, mort: { x: der.x, z: der.z, a: der.a }, sonMort: false,
+    };
+  }
+  function echantillon(buf, t) {
+    if (t <= buf[0].t) return buf[0];
+    for (let i = 0; i < buf.length - 1; i++) {
+      const a = buf[i], b = buf[i + 1];
+      if (t >= a.t && t <= b.t) {
+        const k = b.t > a.t ? (t - a.t) / (b.t - a.t) : 0;
+        let da = b.a - a.a; da = Math.atan2(Math.sin(da), Math.cos(da));
+        return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k, a: a.a + da * k, pas: a.pas + (b.pas - a.pas) * k, v: a.v + (b.v - a.v) * k };
+      }
+    }
+    return buf[buf.length - 1];
+  }
+  function majRalenti(rp, ecoule) {
+    if (!rp.demarre) { rp.demarre = true; document.body.dataset.ralenti = '1'; A.jouer('ralenti'); }
+    const tr = Math.min(rp.tFin + RALENTI_APRES, rp.tDebut + ecoule * RALENTI_VITESSE);
+    const itr = C.instant(J.monde, tr);
+    const s = J.salle;
+    placerGroupe(s.groupe, s.id, itr);
+    const ctx = ctxPour(s, tr, itr);
+    for (const p of s.pieges) { try { p.maj(tr, ctx); } catch (e) { /* */ } }
+    const fig = J.figJoueur;
+    if (fig.racine.parent !== s.groupe) s.groupe.add(fig.racine);
+    const e = echantillon(rp.buffer, Math.min(tr, rp.tFin));
+    const chute = clamp((tr - rp.tFin) / 300, 0, 1);
+    fig.racine.position.set(e.x, 0.2 * chute, e.z);
+    fig.racine.rotation.set(-chute * Math.PI / 2, e.a, 0);
+    if (tr < rp.tFin) fig.animer(e.pas, e.v); else fig.animer(0, 0);
+    if (tr >= rp.tFin && !rp.sonMort) { rp.sonMort = true; A.jouer('mort', 0.6); }
+    // caméra basse qui tourne lentement autour du personnage, gardée dans la salle
+    const th = rp.a0 + ecoule / 1000 * 0.16, d = 5.6;
+    const lx = clamp(e.x + Math.sin(th) * d, -DM + 0.6, DM - 0.6), lz = clamp(e.z + Math.cos(th) * d, -DM + 0.6, DM - 0.6);
+    const cam = s.groupe.localToWorld(new THREE.Vector3(lx, 3.1, lz));
+    const vise = s.groupe.localToWorld(new THREE.Vector3(e.x, 0.8, e.z));
+    if (camera.fov !== 56) { camera.fov = 56; camera.updateProjectionMatrix(); }
+    camera.position.copy(cam); camera.lookAt(vise);
+    lumJoueur.position.copy(vise).add(new THREE.Vector3(0, 2.2, 0));
+    s.murs.forEach(m => { m.mat.opacity = 1; m.mat.depthWrite = true; });
+  }
+  function finirRalenti(rp) {
+    rp.fini = true; delete document.body.dataset.ralenti;
+    camera.fov = 46; camera.updateProjectionMatrix();
+    const fig = J.figJoueur;
+    fig.racine.position.set(rp.mort.x, 0.2, rp.mort.z);
+    fig.racine.rotation.set(-Math.PI / 2, rp.mort.a, 0);
+  }
   function nettoyerJeu() {
+    delete document.body.dataset.ralenti;
+    if (camera && camera.fov !== 46) { camera.fov = 46; camera.updateProjectionMatrix(); }
     J.mode = 'menu'; delete document.body.dataset.cinematique; document.body.dataset.ecran = 'menu';
     $('#cinematique').hidden = true;
     if (J.vueEnsemble) { scene.remove(J.vueEnsemble); J.vueEnsemble = null; scene.fog.density = 0.024; }

@@ -197,6 +197,17 @@
   #cinematique:not([hidden]) #cin-l2 { animation: apparait 1.2s ease 3.6s forwards; }
   #cinematique:not([hidden]) #cin-l3 { animation: apparait 1.2s ease 6s forwards; }
   @keyframes apparait { to { opacity: 1; } }
+  /* ralenti de la mort : bandes noires, léger sépia, textes après le ralenti */
+  #ralenti { display: none; }
+  body[data-ralenti] #ralenti { display: block; position: fixed; inset: 0; pointer-events: none; }
+  body[data-ralenti] #ralenti::before, body[data-ralenti] #ralenti::after { content: ""; position: fixed; left: 0; right: 0; height: 11vh; background: #000; }
+  body[data-ralenti] #ralenti::before { top: 0; } body[data-ralenti] #ralenti::after { bottom: 0; }
+  #ralenti span { position: fixed; left: 24px; top: calc(11vh + 14px); font-family: var(--f-titre); letter-spacing: .4em; text-transform: uppercase; font-size: .9rem; color: #e8d7a8; opacity: .85; animation: clignote 1.6s ease-in-out infinite; }
+  @keyframes clignote { 50% { opacity: .35; } }
+  body[data-ralenti] #scene { filter: sepia(.35) contrast(1.08) saturate(.85); }
+  body[data-cinematique="mort"] #cinematique:not([hidden]) #cin-l1 { animation-delay: 6.6s; }
+  body[data-cinematique="mort"] #cinematique:not([hidden]) #cin-l2 { animation-delay: 7.4s; }
+  body[data-cinematique="mort"] #cinematique:not([hidden]) #cin-l3 { animation-delay: 8.2s; }
   @keyframes ecarte { from { letter-spacing: .1em; } to { letter-spacing: .5em; } }
 
   /* ---------- manette de direction (bas, au milieu) ---------- */
@@ -381,7 +392,7 @@
 </section>
 
 <div id="fondu"></div>
-<div id="cinematique" hidden><div><div id="cin-titre"></div><p id="cin-l1"></p><p id="cin-l2"></p><p id="cin-l3"></p></div></div>
+<div id="cinematique" hidden><div id="ralenti" aria-hidden="true"><span>Ralenti</span></div><div><div id="cin-titre"></div><p id="cin-l1"></p><p id="cin-l2"></p><p id="cin-l3"></p></div></div>
 <div id="chargement" hidden><div><div class="cube-attente" aria-hidden="true"></div><p id="chargement-txt"></p></div></div>
 <div id="dialogue" hidden><section class="panneau" aria-labelledby="dialogue-titre"><h3 id="dialogue-titre"></h3><p id="dialogue-corps"></p><button type="button" class="btn or" id="dialogue-ok">Fermer</button></section></div>
 
