@@ -172,7 +172,7 @@
     'Cube des Pendules', 'Cube du Silence', 'Cube de Lumière', 'Cube Obscur', 'Cube du Temps', 'Cube du Labyrinthe',
     'Cube des Énigmes', 'Cube de Téléportation', 'Cube des Statues', 'Cube des Chaînes', 'Cube Instable',
     'Cube du Jugement', 'Cube de la Folie', 'Cube de la Mort', 'Cube de Libération'];
-  const RANG_FAMILLE = [0, 0, 1, 4, 2, 1, 0, 2, 2, 0, 3, 1, 1, 2, 0, 2, 1, 1, 3, 3, 3, 4, 5, 5, 6];
+  const RANG_FAMILLE = [0, 0, 1, 4, 2, 1, 0, 2, 2, 1, 3, 1, 1, 2, 1, 2, 1, 1, 3, 3, 3, 4, 5, 5, 6];
   const REGIONS = ['Les Couloirs Oubliés', 'Les Murs Vivants', 'Le Sol des Traîtres', 'La Forêt des Lames',
     'Les Portes de la Folie', 'Le Cœur du Chaos', 'Le Dernier Supplice'];
 
@@ -608,10 +608,10 @@
     return Math.max(0, Math.min(6, Math.floor((d + bruit) * 7)));
   }
   function poidsFamille(z, f) {
-    if (f === 0) return Math.max(3, 30 - z * 5);
+    if (f === 0) return Math.max(2, 10 - z * 2); // salles vides : rares, même près de l'entrée
     const r = RANG_FAMILLE[f];
     if (z < r - 1) return 0;
-    if (z === r - 1) return 2;
+    if (z === r - 1) return 5;
     return z - r >= 3 ? 5 : 10;
   }
   function specSalle(m, id) {
