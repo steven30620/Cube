@@ -338,10 +338,13 @@
       x.fillStyle = '#ffffff'; x.fillRect(0, 0, w, h);
       const cx = w / 2;
       if (type === 'crane') {
-        x.fillStyle = '#1a1612';
-        x.beginPath(); x.ellipse(cx - 30, 104, 20, 25, 0, 0, TAU); x.fill(); x.beginPath(); x.ellipse(cx + 30, 104, 20, 25, 0, 0, TAU); x.fill();
-        x.beginPath(); x.moveTo(cx, 132); x.lineTo(cx - 8, 150); x.lineTo(cx + 8, 150); x.fill();
-        for (let i = 0; i < 7; i++) x.fillRect(cx - 34 + i * 10, 170, 6, 16);
+        x.fillStyle = '#111111';
+        x.beginPath(); x.ellipse(cx - 30, 98, 19, 21, 0, 0, TAU); x.fill(); x.beginPath(); x.ellipse(cx + 30, 98, 19, 21, 0, 0, TAU); x.fill();
+        x.beginPath(); x.moveTo(cx, 120); x.lineTo(cx - 7, 134); x.lineTo(cx + 7, 134); x.closePath(); x.fill();
+        // sourire : bande noire incurvée, dents blanches
+        x.beginPath(); x.moveTo(cx - 50, 146); x.quadraticCurveTo(cx, 196, cx + 50, 146); x.quadraticCurveTo(cx, 176, cx - 50, 146); x.fill();
+        x.lineWidth = 7; x.strokeStyle = '#111111'; x.beginPath(); x.moveTo(cx - 52, 144); x.quadraticCurveTo(cx, 186, cx + 52, 144); x.stroke();
+        x.fillStyle = '#ffffff'; for (let i = -3; i <= 3; i++) x.fillRect(cx + i * 12 - 3, 152 + Math.abs(i) * -2 + 6, 6, 12);
         return;
       }
       // yeux avec reflet, sourcils, joues, bouche
@@ -405,38 +408,49 @@
   }
   const geoTenon = () => geo('tenon', () => { const pts = [new THREE.Vector2(0.0001, 0), new THREE.Vector2(0.11, 0), new THREE.Vector2(0.11, 0.06), new THREE.Vector2(0.1, 0.08), new THREE.Vector2(0.0001, 0.08)]; return new THREE.LatheGeometry(pts, 24); });
   const geoMain = () => geo('main', () => new THREE.TorusGeometry(0.072, 0.03, 10, 20, Math.PI * 1.45));
-  /** Figurine articulée. look = { tunique, pantalon, ceinture, peau, coiffe } */
+  /** Figurine de brique classique, d'après le modèle fourni : tête à tenon, torse trapézoïdal, bras coudés,
+   *  mains en C, hanches, jambes à pied. look = { unie } (couleur unique dans le Cube) ou { tunique, pantalon, peau }. */
   function creerFigurine(look, opts) {
     opts = opts || {};
     look = look || {};
-    const sq = !!opts.squelette;
-    const cT = sq ? 0xe9e2cf : (look.tunique != null ? look.tunique : 0x555555), cP = sq ? 0xddd5c0 : (look.pantalon != null ? look.pantalon : 0x222222), cB = sq ? 0xd0c8b2 : (look.ceinture != null ? look.ceinture : 0xc9a24a);
-    const cS = sq ? 0xe9e2cf : (PEAUX[look.peau] || PEAUX.jaune);
+    if (opts.squelette) return creerSquelette(opts);
     const mod = opts.teinte != null ? (c => melange(c, opts.teinte, opts.force || 0.35)) : (c => c);
-    const terne = opts.teinte != null || sq;
+    const terne = opts.teinte != null;
+    const unie = look.unie != null ? look.unie : null;
+    const cTete = unie != null ? unie : (PEAUX[look.peau] || PEAUX.jaune);
+    const cTorse = unie != null ? unie : (look.tunique != null ? look.tunique : 0xf4f4f0);
+    const cJambes = unie != null ? unie : (look.pantalon != null ? look.pantalon : 0xf4f4f0);
+    const cMains = unie != null ? unie : cTete;
+    const mT = plastique(mod(cTorse), { mat: terne }), mJ = plastique(mod(cJambes), { mat: terne }), mH = plastique(mod(cTete), { mat: terne }), mM = plastique(mod(cMains), { mat: terne });
     const racineG = new THREE.Group();
     const corps = groupe(racineG);
-    const mP = plastique(mod(cP), { mat: terne }), mS = plastique(mod(cS), { mat: terne }), mT = plastique(mod(cT), { mat: terne });
-    const mFace = plastique(sq ? 0xffffff : 0xffffff, { map: sq || terne ? texTorse(mod(cT), mod(cB)) : texTorse(cT, cB), mat: terne });
-    // hanches et jambes
-    const hanche = bloc(corps, 0.66, 0.14, 0.34, mP, 0, 0.67, 0, 0.025);
-    const jG = groupe(corps, -0.165, 0.62, 0), jD = groupe(corps, 0.165, 0.62, 0);
-    for (const j of [jG, jD]) { bloc(j, 0.31, 0.5, 0.32, mP, 0, -0.27, -0.01, 0.03); bloc(j, 0.31, 0.12, 0.42, plastique(mod(teinte(cP, -0.35)), { mat: terne }), 0, -0.54, 0.04, 0.03); }
-    // torse imprimé
-    const torse = new THREE.Mesh(geoTorse(), [mT, mT, mT, mT, mFace, mT]); torse.position.set(0, 1.04, 0); corps.add(torse);
-    // bras, épaules, mains en C
-    const bG = groupe(corps, -0.36, 1.27, 0), bD = groupe(corps, 0.36, 1.27, 0);
-    for (const [b, s] of [[bG, -1], [bD, 1]]) {
-      sph(b, 0.1, mT, s * 0.01, 0, 0);
-      const a = cyl(b, 0.088, 0.096, 0.46, 18, mT, s * 0.045, -0.23, 0.02); a.rotation.z = s * 0.14;
-      const poignet = cyl(b, 0.05, 0.05, 0.06, 14, mS, s * 0.08, -0.48, 0.05);
-      const m = new THREE.Mesh(geoMain(), mS); m.position.set(s * 0.085, -0.56, 0.08); m.rotation.set(Math.PI / 2 - 0.3, 0, Math.PI * 0.6); b.add(m);
+    // hanches (avec la fente centrale) et jambes
+    const hanche = bloc(corps, 0.66, 0.15, 0.34, mJ, 0, 0.68, 0, 0.025);
+    boite(corps, 0.025, 0.12, 0.345, plastique(mod(teinte(cJambes, -0.25)), { mat: terne }), 0, 0.68, 0);
+    const jG = groupe(corps, -0.165, 0.63, 0), jD = groupe(corps, 0.165, 0.63, 0);
+    for (const j of [jG, jD]) {
+      const art = cyl(j, 0.075, 0.075, 0.3, 20, mJ, 0, 0, -0.02); art.rotation.z = Math.PI / 2;
+      bloc(j, 0.31, 0.48, 0.3, mJ, 0, -0.28, -0.02, 0.03);
+      bloc(j, 0.31, 0.11, 0.38, mJ, 0, -0.565, 0.02, 0.025);
     }
-    const cou = cyl(corps, 0.1, 0.11, 0.07, 18, mS, 0, 1.37, 0);
-    const tete = groupe(corps, 0, 1.55, 0);
-    const mTete = new THREE.Mesh(geoTete(), plastique(mod(cS), { map: texVisage(sq ? 'crane' : (opts.visage || 'calme')), mat: terne })); tete.add(mTete);
-    const tenon = new THREE.Mesh(geoTenon(), mS); tenon.position.y = H_TETE / 2 - 0.005; tete.add(tenon);
-    if (!sq && !opts.sansCoiffe) coiffe(tete, look.coiffe, mod, terne);
+    // torse trapézoïdal et cou
+    const torse = new THREE.Mesh(geoTorse(), mT); torse.position.set(0, 1.055, 0); corps.add(torse);
+    const cou = cyl(corps, 0.09, 0.1, 0.07, 24, mH, 0, 1.39, 0);
+    // bras : épaule arrondie, avant-bras coudé vers l'avant, poignet, main en C
+    const bG = groupe(corps, -0.31, 1.26, 0), bD = groupe(corps, 0.31, 1.26, 0);
+    for (const [b, s] of [[bG, -1], [bD, 1]]) {
+      sph(b, 0.105, mT, s * 0.02, 0, 0);
+      const haut = cyl(b, 0.09, 0.095, 0.28, 20, mT, s * 0.075, -0.13, 0); haut.rotation.z = s * 0.32;
+      const coude = groupe(b, s * 0.12, -0.26, 0);
+      sph(coude, 0.093, mT, 0, 0, 0);
+      const avant = cyl(coude, 0.088, 0.085, 0.2, 20, mT, 0, -0.06, 0.07); avant.rotation.x = -1.0;
+      cyl(coude, 0.045, 0.045, 0.06, 14, mM, 0, -0.13, 0.17).rotation.x = -1.0;
+      const main = new THREE.Mesh(geoMain(), mM); main.position.set(0, -0.17, 0.22); main.rotation.set(-0.4, s * 0.25, Math.PI / 2 + s * 0.35); coude.add(main);
+    }
+    // tête lisse à tenon, sans visage (comme le modèle)
+    const tete = groupe(corps, 0, 1.58, 0);
+    tete.add(new THREE.Mesh(geoTete(), mH));
+    const tenon = new THREE.Mesh(geoTenon(), mH); tenon.position.y = H_TETE / 2 - 0.005; tete.add(tenon);
     if (opts.objetMain) { const l = boite(bD, 0.05, 0.05, 0.9, M.acier(), 0.07, -0.56, 0.4); l.rotation.x = 0.1; }
     corps.scale.setScalar(1.3);
     racineG.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -448,29 +462,53 @@
     };
     return f;
   }
-  function coiffe(tete, type, mod, terne) {
-    const P = c => plastique(mod(c), { mat: terne });
-    const lathe = (k, pts, seg, ph0, phL) => geo(k, () => new THREE.LatheGeometry(pts.map(([a, b]) => new THREE.Vector2(a, b)), seg || 32, ph0 || 0, phL || TAU));
-    const DOS0 = 1.0, DOSL = TAU - 2.0; // laisse le visage dégagé (l'avant est à l'angle 0)
-    const cheveux = () => {
-      const mc = P(0x1b1410);
-      tete.add(new THREE.Mesh(lathe('cheveux-haut', [[0.0001, 0.205], [0.12, 0.195], [0.2, 0.145], [0.216, 0.1]]), mc));
-      tete.add(new THREE.Mesh(lathe('cheveux-dos', [[0.216, 0.1], [0.218, -0.04], [0.205, -0.09]], 28, DOS0, DOSL), mc));
-    };
-    switch (type) {
-      case 'kasa': {
-        const m = new THREE.Mesh(lathe('kasa', [[0.0001, 0.27], [0.05, 0.26], [0.2, 0.17], [0.42, 0.06], [0.48, 0.035], [0.47, 0.02], [0.2, 0.12], [0.0001, 0.2]], 40), new THREE.MeshPhysicalMaterial({ color: mod(0xffffff), map: texPaille(), roughness: 0.85, clearcoat: 0.1, side: THREE.DoubleSide }));
-        m.position.y = 0.12; tete.add(m); cyl(tete, 0.006, 0.006, 0.34, 6, P(0x3a2a1a), 0.17, -0.05, 0.05).rotation.z = 0.2; break;
-      }
-      case 'chignon': cheveux(); sph(tete, 0.085, P(0x1b1410), 0, 0.28, -0.04); cyl(tete, 0.008, 0.008, 0.26, 6, P(0xc9a24a), 0, 0.29, -0.04).rotation.z = Math.PI / 2; break;
-      case 'casque': {
-        const m = new THREE.Mesh(lathe('casque', [[0.0001, 0.28], [0.1, 0.26], [0.2, 0.18], [0.235, 0.06], [0.24, -0.06], [0.3, -0.08], [0.3, -0.1], [0.22, -0.09]], 40), mat(0xffffff, { r: 0.35, m: 0.9, map: T.bronze().map, bump: T.bronze().bump, bs: 0.01 }));
-        m.position.y = 0.02; tete.add(m); cone(tete, 0.045, 0.24, P(0xa3271f), 0, 0.42, 0, 12); break;
-      }
-      case 'bandeau': cheveux(); cyl(tete, 0.218, 0.218, 0.06, 32, P(0xa3271f), 0, 0.06, 0); break;
-      case 'voile': { const mv = P(0x2d2a3a); tete.add(new THREE.Mesh(lathe('voile-haut', [[0.0001, 0.25], [0.15, 0.23], [0.24, 0.12]]), mv)); tete.add(new THREE.Mesh(lathe('voile-dos', [[0.24, 0.12], [0.255, -0.05], [0.28, -0.24], [0.26, -0.26]], 28, DOS0, DOSL), mv)); break; }
-      default: cheveux();
+  /** Squelette de brique, d'après le modèle fourni : crâne imprimé, cage thoracique, os fins, pieds carrés. */
+  function creerSquelette(opts) {
+    const cOs = opts.teinte != null ? melange(0xf2efe6, opts.teinte, Math.min(0.35, opts.force || 0.2)) : 0xf2efe6;
+    const mO = plastique(cOs, { mat: opts.teinte != null });
+    const racineG = new THREE.Group(), corps = groupe(racineG);
+    // bassin : barre transversale et attaches
+    bloc(corps, 0.6, 0.07, 0.12, mO, 0, 0.7, 0, 0.02);
+    bloc(corps, 0.12, 0.16, 0.12, mO, 0, 0.78, 0, 0.02);
+    const jG = groupe(corps, -0.17, 0.66, 0), jD = groupe(corps, 0.17, 0.66, 0);
+    for (const j of [jG, jD]) {
+      sph(j, 0.075, mO, 0, 0, 0);
+      cyl(j, 0.045, 0.05, 0.24, 16, mO, 0, -0.14, 0);
+      sph(j, 0.07, mO, 0, -0.29, 0).scale.set(1, 0.8, 1);
+      cyl(j, 0.042, 0.048, 0.2, 16, mO, 0, -0.42, 0);
+      bloc(j, 0.24, 0.1, 0.34, mO, 0, -0.56, 0.03, 0.025);
+      for (let k = 0; k < 3; k++) bloc(j, 0.06, 0.05, 0.08, mO, -0.07 + k * 0.07, -0.6, 0.2, 0.012);
     }
+    // colonne et côtes
+    cyl(corps, 0.05, 0.05, 0.62, 16, mO, 0, 1.08, -0.08);
+    for (let i = 0; i < 4; i++) {
+      const rr = 0.27 - i * 0.025;
+      const cote = new THREE.Mesh(geo('cote' + i, () => new THREE.TorusGeometry(rr, 0.032, 10, 28, Math.PI)), mO);
+      cote.rotation.x = Math.PI / 2; cote.rotation.z = Math.PI; cote.position.set(0, 1.3 - i * 0.12, -0.08); cote.scale.set(1, 0.62, 1);
+      corps.add(cote);
+    }
+    bloc(corps, 0.08, 0.32, 0.05, mO, 0, 1.13, 0.12, 0.015); // sternum
+    bloc(corps, 0.66, 0.12, 0.3, mO, 0, 1.36, -0.02, 0.03);  // clavicules et épaules
+    const cou = cyl(corps, 0.06, 0.07, 0.1, 16, mO, 0, 1.46, 0);
+    // bras : os fins, coude, main en C
+    const bG = groupe(corps, -0.33, 1.32, 0), bD = groupe(corps, 0.33, 1.32, 0);
+    for (const [b, s] of [[bG, -1], [bD, 1]]) {
+      bloc(b, 0.16, 0.14, 0.2, mO, s * 0.03, 0.02, 0, 0.03);
+      const haut = cyl(b, 0.04, 0.045, 0.28, 14, mO, s * 0.07, -0.16, 0); haut.rotation.z = s * 0.25;
+      const coude = groupe(b, s * 0.11, -0.3, 0);
+      sph(coude, 0.055, mO, 0, 0, 0);
+      const avant = cyl(coude, 0.038, 0.04, 0.2, 14, mO, 0, -0.06, 0.07); avant.rotation.x = -1.0;
+      const main = new THREE.Mesh(geoMain(), mO); main.position.set(0, -0.15, 0.2); main.rotation.set(-0.4, s * 0.25, Math.PI / 2 + s * 0.35); coude.add(main);
+    }
+    // crâne imprimé
+    const tete = groupe(corps, 0, 1.66, 0);
+    tete.add(new THREE.Mesh(geoTete(), plastique(cOs, { map: texVisage('crane'), mat: opts.teinte != null })));
+    const tenon = new THREE.Mesh(geoTenon(), mO); tenon.position.y = H_TETE / 2 - 0.005; tete.add(tenon);
+    corps.scale.setScalar(1.3);
+    racineG.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    const f = { racine: racineG, corps, jG, jD, bG, bD, tete, cou, squelette: true };
+    f.animer = (pas, vitesse) => { const a = Math.sin(pas) * 0.7 * vitesse; jG.rotation.x = a; jD.rotation.x = -a; bG.rotation.x = -a * 0.9; bD.rotation.x = a * 0.9; };
+    return f;
   }
 
   // =====================================================================
@@ -1375,8 +1413,7 @@
         const v = construirePorteVisuelle(fg, spec, false);
         // plaque (sceau fixe + cadran mobile) à droite de la porte
         const plaque = bloc(fg, 0.9, 0.62, 0.07, M.bronze(), PL / 2 + 0.75, 1.45, -DM + EP / 2 + 0.035, 0.02);
-        const cad = boite(fg, 0.7, 0.14, 0.02, mat(0x0d0b08), PL / 2 + 0.75, 1.32, -DM + EP / 2 + 0.07);
-        const rune = boite(fg, 0.28, 0.2, 0.02, mat(spec.palette.acc, { e: teinte(spec.palette.acc, -0.7) }), PL / 2 + 0.75, 1.6, -DM + EP / 2 + 0.07);
+        const cad = boite(fg, 0.8, 0.575, 0.012, mat(0xffffff, { map: texSceau(spec, f), r: 0.55, m: 0.35 }), PL / 2 + 0.75, 1.45, -DM + EP / 2 + 0.076);
         for (let k = 0; k <= f; k++) sph(fg, 0.05, M.or(), -0.3 * f / 2 + k * 0.3, HP + 0.3, -DM + EP / 2 + 0.04, 6);
         const [px, pz] = localDepuisFace(f, PL / 2 + 0.75, 0.9);
         interactifs.push({ type: 'plaque', face: f, x: px, z: pz, r: 1.25 });
@@ -1567,6 +1604,42 @@
     } catch (e) { cPortraits.set(k, null); return null; }
   }
 
+  // =====================================================================
+  // SCEAU GRAVÉ EN CARACTÈRES CHINOIS
+  // Le signe de la famille de chiffrement (龍 蛇 蓮 鏡 鐘 衛) dans un cachet vermillon, puis trois
+  // colonnes lues de droite à gauche : 天 + rune A, 地 + rune B, 人 + région, en chiffres chinois.
+  // =====================================================================
+  const CHIFFRES_CN = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  const SIGNES_CN = ['龍', '蛇', '蓮', '鏡', '鐘', '衛'];
+  const POLICE_CN = '"Shippori Mincho B1", "Noto Serif CJK SC", "Noto Serif JP", "Songti SC", "SimSun", "MS Mincho", serif';
+  function dessinerSceau(x, w, h, sp, face) {
+    x.clearRect(0, 0, w, h);
+    const fond = x.createLinearGradient(0, 0, w, h); fond.addColorStop(0, '#3a2a14'); fond.addColorStop(1, '#22180c');
+    x.fillStyle = fond; x.fillRect(0, 0, w, h);
+    x.strokeStyle = '#c9a24a'; x.lineWidth = Math.max(2, w * 0.01); x.strokeRect(w * 0.02, w * 0.02, w - w * 0.04, h - w * 0.04);
+    x.lineWidth = 1; x.strokeRect(w * 0.04, w * 0.04, w - w * 0.08, h - w * 0.08);
+    // cachet vermillon à gauche
+    const cs = Math.min(h * 0.62, w * 0.36), cx = w * 0.07, cy = (h - cs) / 2 - h * 0.04;
+    x.fillStyle = '#a3271f'; x.fillRect(cx, cy, cs, cs);
+    x.strokeStyle = '#f2e3c4'; x.lineWidth = cs * 0.05; x.strokeRect(cx + cs * 0.08, cy + cs * 0.08, cs * 0.84, cs * 0.84);
+    x.fillStyle = '#f2e3c4'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    const signes = sp.chiffres.map(f => SIGNES_CN[f]);
+    if (signes.length === 1) { x.font = '800 ' + Math.round(cs * 0.62) + 'px ' + POLICE_CN; x.fillText(signes[0], cx + cs / 2, cy + cs / 2 + cs * 0.02); }
+    else { x.font = '800 ' + Math.round(cs * 0.38) + 'px ' + POLICE_CN; x.fillText(signes[0], cx + cs / 2, cy + cs * 0.3); x.fillText(signes[1], cx + cs / 2, cy + cs * 0.72); }
+    // trois colonnes verticales, de droite à gauche
+    const cols = [['天', sp.runeA], ['地', sp.runeB], ['人', sp.zone]], taille = Math.round(h * 0.2), x0 = cx + cs + (w - cx - cs) * 0.22;
+    x.font = '700 ' + taille + 'px ' + POLICE_CN;
+    cols.forEach(([t, v], i) => {
+      const colX = w - w * 0.1 - i * (w - w * 0.1 - x0) / 2.2;
+      x.fillStyle = '#c9a24a'; x.fillText(t, colX, cy + taille * 0.6);
+      x.fillStyle = i === 2 ? '#e0a080' : '#f2e3c4'; x.fillText(CHIFFRES_CN[v] || String(v), colX, cy + taille * 1.75);
+    });
+    // points de la face, sous le cachet
+    x.fillStyle = '#c9a24a';
+    for (let i = 0; i <= face; i++) { x.beginPath(); x.arc(w / 2 - face * w * 0.03 + i * w * 0.06, h - h * 0.11, Math.max(2, w * 0.016), 0, TAU); x.fill(); }
+  }
+  const texSceau = (sp, face) => memo('sceau' + sp.id + '-' + face, () => { const c = toileVide(320, 230); dessinerSceau(c.getContext('2d'), 320, 230, sp, face); return versTexture(c, true); });
+
   /** Prépare en tâche de fond les textures d'une couleur de salle de plus (true tant qu'il en reste). */
   let iPrechauffe = 0;
   function prechauffer() {
@@ -1582,7 +1655,7 @@
   }
 
   racine.RenduCube = {
-    regler, prechauffer, preparerEnvironnement, preparerOmbres, portrait, halo, plastique, bloc,
+    regler, prechauffer, dessinerSceau, preparerEnvironnement, preparerOmbres, portrait, halo, plastique, bloc,
     THREE, mat, boite, cyl, sph, cone, groupe, M, teinte, melange, hex, fr,
     creerFigurine, creerCadavre, creerObjet, construireSalle, construireCoque, construireStructure, construireVueEnsemble,
     animerPorte, localDepuisFace, faceDepuisLocal, ANGLE_FACE, dessinerBatonnets, COUL_RARETE, PEAUX, texGlyphe,

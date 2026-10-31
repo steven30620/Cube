@@ -433,6 +433,9 @@
     J.memoire = { salles: new Map() };
     J.gains = []; J.deso = 0; J.chat = []; J.declencheurs = []; J.enigmes.clear(); J.fossesOuvertes.clear();
     J.verrous = new Set(reprise && Array.isArray(reprise.ouvertes) ? reprise.ouvertes : []); J.verrouGrippe = 0;
+    J.decal = new Map(reprise && Array.isArray(reprise.decal) ? reprise.decal : []); J.pivot = null; J.retourInterdit = null;
+    J.monde.decalVue = id => J.decal.get(id) || 0;
+    J.couleur = await choisirCouleur(reprise ? reprise.couleur : null);
     rendreChat();
     let cube = J.monde.idEntree, x = 0, z = 3.2;
     if (reprise && reprise.cube && reprise.cube <= J.monde.nbSalles) { cube = reprise.cube; x = clamp(+reprise.x || 0, -5, 5); z = clamp(+reprise.z || 0, -5, 5); }
@@ -444,7 +447,7 @@
         afficherChargement('La salle d’entrée est occupée. Le mécanisme attend…');
         await dormir(3000);
       }
-      D.tentative = { perso: perso.id, inst, cube, x, z, debut: N.maintenant(), ouvertes: [] };
+      D.tentative = { perso: perso.id, inst, cube, x, z, debut: N.maintenant(), ouvertes: [], decal: [], couleur: J.couleur };
       perso.statut = 'cube';
       perso.tentatives.unshift({ debut: N.maintenant(), inst, issue: 'en cours', objets: [] });
       if (perso.tentatives.length > 30) perso.tentatives.length = 30;
@@ -468,10 +471,28 @@
     J.mode = 'jeu';
     document.body.dataset.ecran = 'jeu';
     cacherChargement();
-    $('#hud-nom').textContent = perso.nom;
-    dessinerPortrait($('#hud-portrait'), perso.look);
+    $('#hud-nom').textContent = perso.nom + ' · ' + C.COULEURS_CUBE[J.couleur][0];
+    dessinerPortrait($('#hud-portrait'), lookCube());
     message(reprise ? 'Tu rouvres les yeux. La pierre est froide.' : 'La trappe se referme au-dessus de toi.');
     publierPresence(true);
+  }
+  const lookCube = () => ({ unie: C.COULEURS_CUBE[J.couleur != null ? J.couleur : 0][1] });
+  /** Une couleur unie libre dans ce Cube : aucun autre captif présent ne la porte (50 couleurs). */
+  async function choisirCouleur(pref) {
+    if (N.db && N.salon) {
+      try {
+        for (let i = 0; i < 4; i++) {
+          const v = await avecDelai(N.db.doc('instances/' + I.id + '/verrous/couleurs').acquire({ holder: (N.uid || '') + ONGLET, ttlMs: 3000 }), 4000);
+          if (v && v.acquired) break; await dormir(600);
+        }
+      } catch (e) { /* sans verrou */ }
+      await dormir(400);
+    }
+    const prises = new Set(N.peers.filter(p => !estMoi(p)).map(lirePeer).filter(d => d.v === 1 && d.i === I.id && typeof d.k === 'number').map(d => d.k));
+    let k = typeof pref === 'number' && pref >= 0 && pref < C.COULEURS_CUBE.length && !prises.has(pref) ? pref : -1;
+    if (k < 0) { const libres = []; for (let i = 0; i < C.COULEURS_CUBE.length; i++) if (!prises.has(i)) libres.push(i); k = libres.length ? libres[Math.floor(Math.random() * libres.length)] : Math.floor(Math.random() * C.COULEURS_CUBE.length); }
+    N.presence({ v: 1, i: I.id, k }); // réserve la couleur tout de suite
+    return k;
   }
   function vivantsDans(cube) {
     return N.peers.filter(p => { const d = lirePeer(p); return !estMoi(p) && d.v === 1 && d.c === cube && !d.mort; }).length;
@@ -495,7 +516,7 @@
     // joueur
     if (!J.figJoueur || premiere) {
       if (J.figJoueur && J.figJoueur.racine.parent) J.figJoueur.racine.parent.remove(J.figJoueur.racine);
-      J.figJoueur = R.creerFigurine(J.perso.look, {});
+      J.figJoueur = R.creerFigurine(lookCube(), {});
       const anneau = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 28), R.mat(0xc9a24a, { basic: true, add: true, op: 0.45 }));
       anneau.rotation.x = -Math.PI / 2; anneau.position.y = 0.03; J.figJoueur.racine.add(anneau); J.figJoueur.anneau = anneau;
     }
@@ -566,8 +587,12 @@
         if (s.traits.condamnee && s.traits.condamnee.scelle(t)) bloque = 'scelle';
         if (!enigmeOk) bloque = 'enigme';
         if (!J.verrous.has(s.id + ':' + f)) bloque = 'verrou';
+        if (J.retourInterdit && J.retourInterdit.cube === s.id && ep.voisin && ep.voisin === J.retourInterdit.vers) bloque = 'retour';
+        if (J.pivot && J.pivot.id === s.id) bloque = 'pivot';
       } else if (f === 4 && s.traits.escalier && s.traits.escalier.etat(t) === 2) bloque = 'echelle';
       if (f >= 4 && !J.verrous.has(s.id + ':' + f)) bloque = 'verrou';
+      if (f >= 4 && J.retourInterdit && J.retourInterdit.cube === s.id && ep.voisin && ep.voisin === J.retourInterdit.vers) bloque = 'retour';
+      if (f >= 4 && J.pivot && J.pivot.id === s.id) bloque = 'pivot';
       res.push({ f, dir, ep, bloque, passable: (ep.etat === 'ouverte' || ep.etat === 'sortie') && !bloque });
     }
     return res;
@@ -577,6 +602,10 @@
     const s = J.salle, jo = J.joueur;
     // --- la salle courante suit son emplacement réel
     const pos = placerGroupe(s.groupe, s.id, it);
+    if (J.pivot && J.pivot.id === s.id) {
+      const k = clamp((performance.now() - J.pivot.debut) / J.pivot.duree, 0, 1), l = k * k * (3 - 2 * k);
+      if (k < 1) s.groupe.rotation.y = -(pos.angle - (1 - l) * J.pivot.delta) * Math.PI / 2; else J.pivot = null;
+    }
     const rotY = s.groupe.rotation.y;
     // --- mutation : grondement, verrouillage
     if (it.g !== J.derniereG) {
@@ -819,7 +848,7 @@
   function heurterPorte(e, t) {
     if (t - dernierHeurt < 1600) return; dernierHeurt = t;
     const et = e.ep.etat, b = e.bloque;
-    const txt = b === 'verrou' ? 'Un verrou à énigme retient les battants. Examine la plaque de bronze (A ou E).' : b === 'herse' ? 'Une herse barre le passage.' : b === 'temps' ? 'Les battants sont clos. L’eau coule dans la colonne de verre.' : b === 'scelle' ? 'Les portes se sont scellées.' : b === 'enigme' ? 'La porte ne cède pas. Le boulier semble relié au verrou.'
+    const txt = b === 'retour' ? 'Ce passage s’est scellé derrière toi. Impossible de revenir sur tes pas.' : b === 'pivot' ? 'La salle tourne encore sur elle-même.' : b === 'verrou' ? 'Un verrou à énigme retient les battants. Examine la plaque de bronze (A ou E).' : b === 'herse' ? 'Une herse barre le passage.' : b === 'temps' ? 'Les battants sont clos. L’eau coule dans la colonne de verre.' : b === 'scelle' ? 'Les portes se sont scellées.' : b === 'enigme' ? 'La porte ne cède pas. Le boulier semble relié au verrou.'
       : et === 'verrouillee' ? 'Un verrou de bronze est enclenché. Le sol vibre.' : et === 'vide' ? 'Derrière les barreaux, le vide. Un courant d’air glacé.' : et === 'aveugle' ? 'Les battants s’ouvrent sur une paroi.'
       : et === 'bord' ? 'Derrière les barreaux, une pierre épaisse et noire.' : et === 'condamnee' ? 'Des barres de fer condamnent le passage.' : 'La porte reste close.';
     message(txt); A.jouer('verrou', 0.5);
@@ -883,6 +912,7 @@
       jo.traversee = null;
       if (tr.arr) { jo.x = tr.arr.x; jo.z = tr.arr.z; } else { jo.x = 0; jo.z = 3.2; $('#fondu').classList.remove('actif'); J.deso = Math.min(100, J.deso + 12); }
       construireSalleCourante(false);
+      pivoterEntree(ancien);
       apresChangement(ancien);
     }
   }
@@ -895,12 +925,32 @@
     N.presence(presenceObjet(vers));
     return true;
   }
+  /** En entrant, la salle pivote d'un, deux ou trois quarts de tour (pour ce joueur) : aucune porte ne
+   *  ramène alors à la salle d'où il vient, et le passage par lequel il est arrivé se scelle derrière lui. */
+  function pivoterEntree(ancien) {
+    const m = J.monde, id = J.cube;
+    J.retourInterdit = { cube: id, vers: ancien };
+    if (id === m.idLib || !ancien) return; // la salle de la sortie garde son orientation
+    const it = C.instant(m, N.maintenant()), d0 = J.decal.get(id) || 0;
+    const ordre = [1, 2, 3].sort(() => Math.random() - 0.5);
+    let q = ordre[0];
+    for (const c of ordre) {
+      J.decal.set(id, (d0 + c) % 4);
+      const pos = C.positionSalle(m, id, it); let ramene = false;
+      for (let d = 0; d < 4; d++) if (C.etatPorte(m, id, d, it, pos).voisin === ancien) ramene = true;
+      if (!ramene) { q = c; break; }
+    }
+    J.decal.set(id, (d0 + q) % 4);
+    J.pivot = { id, debut: performance.now(), duree: 1500, delta: q };
+    A.jouer('grondement', 0.8); A.jouer('engrenage', 1);
+    J.secousse = Math.max(J.secousse, 0.9); J.deso = Math.min(100, J.deso + 6);
+  }
   function apresChangement(ancien) {
     const it = C.instant(J.monde, N.maintenant());
     const a = C.positionSalle(J.monde, ancien, it), b = C.positionSalle(J.monde, J.cube, it);
     if (C.slotXYZ(J.monde, a.slot).z !== C.slotXYZ(J.monde, b.slot).z) J.deso = Math.min(100, J.deso + 5);
     noterSalle();
-    D.tentative = Object.assign(D.tentative || {}, { cube: J.cube, x: J.joueur.x, z: J.joueur.z, ouvertes: [...J.verrous].slice(-500) });
+    D.tentative = Object.assign(D.tentative || {}, { cube: J.cube, x: J.joueur.x, z: J.joueur.z, ouvertes: [...J.verrous].slice(-500), decal: [...J.decal].slice(-300), couleur: J.couleur });
     sauverTentative();
     publierPresence(true);
   }
@@ -936,6 +986,7 @@
       if (ep.etat !== 'ouverte' || ep.voisin !== m.vers) { jo.montee = null; fig.position.y = 0; message('La trappe s’est refermée d’un coup sec.'); return; }
       const ancien = J.cube; J.cube = m.vers; jo.montee = null; jo.x = 0; jo.z = m.haut ? 0.6 : -0.6;
       construireSalleCourante(false); J.figJoueur.racine.position.y = 0;
+      pivoterEntree(ancien);
       apresChangement(ancien);
     }
   }
@@ -971,7 +1022,7 @@
     $('#fondu').classList.add('actif', 'clair'); A.jouer('cloche', 0.8);
     await dormir(450);
     const ancien = J.cube; J.cube = vers; J.joueur.x = 0; J.joueur.z = 1.6;
-    construireSalleCourante(false); apresChangement(ancien); J.deso = Math.min(100, J.deso + 15);
+    construireSalleCourante(false); pivoterEntree(ancien); apresChangement(ancien); J.deso = Math.min(100, J.deso + 15);
     await dormir(300); $('#fondu').classList.remove('actif', 'clair');
   }
 
@@ -1083,7 +1134,7 @@
   let dernierePres = 0, presPrec = '';
   function presenceObjet(cube) {
     const jo = J.joueur;
-    return { v: 1, i: I.id, c: cube || J.cube, x: Math.round(jo.x * 100) / 100, z: Math.round(jo.z * 100) / 100, a: Math.round((jo.aMonde - (J.salle ? J.salle.groupe.rotation.y : 0)) * 100) / 100, mort: jo.vivant ? 0 : 1, n: J.perso.nom, u: N.uid || ONGLET, l: J.perso.look };
+    return { v: 1, i: I.id, c: cube || J.cube, x: Math.round(jo.x * 100) / 100, z: Math.round(jo.z * 100) / 100, a: Math.round((jo.aMonde - (J.salle ? J.salle.groupe.rotation.y : 0)) * 100) / 100, mort: jo.vivant ? 0 : 1, n: J.perso.nom, u: N.uid || ONGLET, k: J.couleur, l: lookCube() };
   }
   function publierPresence(force) {
     if (!N.salon || !J.joueur) return;
@@ -1274,6 +1325,9 @@
     }
   }
   function dessinerSceau(cv, sp, face) {
+    R.dessinerSceau(cv.getContext('2d'), cv.width, cv.height, sp, face);
+  }
+  function dessinerSceauAncien(cv, sp, face) {
     const x = cv.getContext('2d'), w = cv.width, h = cv.height;
     x.clearRect(0, 0, w, h);
     x.fillStyle = '#2a2014'; x.fillRect(0, 0, w, h);
@@ -1395,7 +1449,7 @@
     $('#invite').hidden = true; fermerPanneaux();
     publierPresence(true);
     N.emettre('mort', { c: J.cube, x: jo.x, z: jo.z, n: J.perso.nom });
-    const corps = { cube: J.cube, x: Math.round(jo.x * 100) / 100, z: Math.round(jo.z * 100) / 100, a: Math.round((jo.aMonde - J.salle.groupe.rotation.y) * 100) / 100, cause, t: N.maintenant(), look: J.perso.look, nom: J.perso.nom, perso: J.perso.id };
+    const corps = { cube: J.cube, x: Math.round(jo.x * 100) / 100, z: Math.round(jo.z * 100) / 100, a: Math.round((jo.aMonde - J.salle.groupe.rotation.y) * 100) / 100, cause, t: N.maintenant(), look: lookCube(), nom: J.perso.nom, perso: J.perso.id };
     const id = idDoc();
     const tombes = (J.perso.equipement || []).map((e, i) => ({ cube: J.cube, x: clamp(jo.x + Math.cos(i * 2.3) * 0.7, -5.4, 5.4), z: clamp(jo.z + Math.sin(i * 2.3) * 0.7, -5.4, 5.4), type: e.type, qte: 1, nom: C.OBJETS[e.type].nom + ' de ' + J.perso.nom, t: N.maintenant(), source: 'corps' }));
     if (N.db) {
@@ -1642,7 +1696,7 @@
     if (mort === 'evade') { perso.statut = 'evade'; tent.issue = 'evade'; }
     else {
       perso.statut = 'mort'; tent.issue = 'mort'; tent.cause = mort; tent.piege = piegeEgare;
-      const corps = { cube, x: (Math.random() - 0.5) * 6, z: (Math.random() - 0.5) * 6, a: Math.random() * TAU, cause: mort, t, look: perso.look, nom: perso.nom, perso: perso.id };
+      const corps = { cube, x: (Math.random() - 0.5) * 6, z: (Math.random() - 0.5) * 6, a: Math.random() * TAU, cause: mort, t, look: { unie: C.COULEURS_CUBE[Math.floor(Math.random() * C.COULEURS_CUBE.length)][1] }, nom: perso.nom, perso: perso.id };
       const id = idDoc();
       if (N.db) N.db.doc('instances/' + I.id + '/corps/' + id).set(corps).catch(() => {}); else { I.corps.set(id, Object.assign({ id }, corps)); sauverInstanceLocale(); }
     }
@@ -1671,9 +1725,10 @@
     }, 0);
   }
   function dessinerPortrait2D(cv, look) {
+    if (look && look.unie != null) look = { tunique: look.unie, pantalon: look.unie, peau: null, unie: look.unie, coiffe: 'nu' };
     const x = cv.getContext('2d'), w = cv.width, h = cv.height;
     x.clearRect(0, 0, w, h);
-    const peau = R.hex(R.PEAUX[look.peau] || R.PEAUX.jaune), tun = R.hex(look.tunique), pan = R.hex(look.pantalon);
+    const peau = R.hex(look.unie != null ? look.unie : (R.PEAUX[look.peau] || R.PEAUX.jaune)), tun = R.hex(look.tunique), pan = R.hex(look.pantalon);
     x.fillStyle = tun; x.beginPath(); x.moveTo(w * 0.28, h * 0.62); x.lineTo(w * 0.72, h * 0.62); x.lineTo(w * 0.8, h); x.lineTo(w * 0.2, h); x.closePath(); x.fill();
     x.fillStyle = '#c9a24a'; x.fillRect(w * 0.2, h * 0.94, w * 0.6, h * 0.04);
     x.fillStyle = peau; x.fillRect(w * 0.43, h * 0.55, w * 0.14, h * 0.08);
@@ -1900,14 +1955,14 @@
     $('#form-recrue').addEventListener('submit', e => {
       e.preventDefault();
       const nom = $('#recrue-nom').value.trim().slice(0, 24) || null;
-      const look = { tunique: parseInt($('#recrue-tunique').value.slice(1), 16), pantalon: parseInt($('#recrue-pantalon').value.slice(1), 16), ceinture: 0xc9a24a, peau: $('#recrue-peau').value, coiffe: $('#recrue-coiffe').value };
+      const look = { tunique: parseInt($('#recrue-tunique').value.slice(1), 16), pantalon: parseInt($('#recrue-pantalon').value.slice(1), 16), ceinture: 0xc9a24a, peau: $('#recrue-peau').value, coiffe: 'nu' };
       const stats = {}; let tot = 0; Object.keys(NOMS_STATS).forEach(k => { stats[k] = clamp(+$('#recrue-' + k).value || 50, 10, 90); tot += stats[k]; });
       if (tot > 250) { $('#recrue-reste').textContent = 'Trop de points : ' + tot + ' / 250.'; return; }
       D.persos.unshift(nouveauPerso(nom, look, stats)); sauverPersos(); rendreMenu();
       $('#recrue-nom').value = ''; $('#form-recrue').closest('details').open = false;
     });
     document.querySelectorAll('#form-recrue input[type=range]').forEach(r => r.addEventListener('input', majReste));
-    $('#btn-hasard').addEventListener('click', () => { const p = nouveauPerso(); $('#recrue-nom').value = p.nom; Object.keys(NOMS_STATS).forEach(k => { $('#recrue-' + k).value = p.stats[k]; }); $('#recrue-tunique').value = R.hex(p.look.tunique); $('#recrue-pantalon').value = R.hex(p.look.pantalon); $('#recrue-peau').value = p.look.peau; $('#recrue-coiffe').value = p.look.coiffe; majReste(); });
+    $('#btn-hasard').addEventListener('click', () => { const p = nouveauPerso(); $('#recrue-nom').value = p.nom; Object.keys(NOMS_STATS).forEach(k => { $('#recrue-' + k).value = p.stats[k]; }); $('#recrue-tunique').value = R.hex(p.look.tunique); $('#recrue-pantalon').value = R.hex(p.look.pantalon); $('#recrue-peau').value = p.look.peau; majReste(); });
     $('#btn-copier-coffre').addEventListener('click', async () => {
       const txt = JSON.stringify({ source: 'cube-des-mille-supplices', monnaies: D.coffre.monnaies, objets: Object.keys(D.coffre.objets).map(t => ({ type: t, nom: C.OBJETS[t].nom, categorie: C.OBJETS[t].cat, rarete: C.OBJETS[t].rarete, quantite: D.coffre.objets[t] })) }, null, 2);
       try { await navigator.clipboard.writeText(txt); $('#btn-copier-coffre').textContent = 'Copié'; } catch (e) { $('#btn-copier-coffre').textContent = 'Copie refusée'; }

@@ -200,6 +200,19 @@
   const PAR_RARETE = { commun: [], rare: [], epique: [], legendaire: [] };
   for (const k in OBJETS) PAR_RARETE[OBJETS[k].rarete].push(k);
 
+  /** Les 50 couleurs unies des captifs dans un même Cube (aucune n'est portée deux fois en même temps). */
+  const COULEURS_CUBE = [
+    ['blanc', 0xf4f4f0], ['noir', 0x1b1b1d], ['gris clair', 0xa8aaad], ['gris foncé', 0x5a5c60], ['rouge', 0xc4161c],
+    ['vermillon', 0xe0431c], ['orange', 0xf08a1c], ['ambre', 0xf2b01e], ['jaune', 0xf6d32d], ['citron', 0xd8e33a],
+    ['olive', 0x7a7d2a], ['vert pomme', 0x8cc63f], ['vert', 0x2e9e45], ['émeraude', 0x0f7a55], ['menthe', 0x8fd9b6],
+    ['turquoise', 0x22b3a6], ['cyan', 0x3ccbe0], ['bleu ciel', 0x8cc8f0], ['azur', 0x2f8fd6], ['bleu', 0x1f5fbf],
+    ['outremer', 0x2b3a9e], ['indigo', 0x3f2a86], ['violet', 0x7a3fb0], ['lilas', 0xb89ad8], ['mauve', 0x9a6a9e],
+    ['magenta', 0xd02a9a], ['fuchsia', 0xe9468a], ['rose', 0xf28cb8], ['rose pâle', 0xf6c6d6], ['saumon', 0xf4977a],
+    ['corail', 0xee6a58], ['brique', 0xa64a32], ['bordeaux', 0x6e1a2c], ['chocolat', 0x4a2a1c], ['brun', 0x7a4a2a],
+    ['caramel', 0xc07a3a], ['sable', 0xd8c08a], ['beige', 0xe8dcc0], ['kaki', 0x8a8a5a], ['vert sapin', 0x1f4a32],
+    ['bleu pétrole', 0x1a5a6a], ['marine', 0x1a2a4a], ['ardoise', 0x5a6a7a], ['lavande', 0x9aa8e0], ['prune', 0x5a2a4a],
+    ['framboise', 0xb02a4a], ['pêche', 0xf6c09a], ['crème', 0xf6eecc], ['ocre', 0xc89a3a], ['acier', 0x7a8a9a],
+  ];
   const TRAITS = ['statue de grue', 'lion gardien', 'dragon peint', 'fissure', 'bannière déchirée', 'gong',
     'brasero éteint', 'colonne brisée', 'inscription murale', 'grand vase', 'miroir de bronze', 'cloche',
     'tablette d’ancêtres', 'paravent', 'arbre de bronze'];
@@ -460,7 +473,9 @@
       else if (it.w >= cfg.PRE_MS) f = (it.w - cfg.PRE_MS) / cfg.MOUV_MS;
     }
     const q = m.rotQ[id] || 0;
-    const o = mod(m.o0[id] + q * n, 4);
+    // decalVue : quart(s) de tour propres à un joueur (la salle pivote quand il y entre)
+    const d = m.decalVue ? (m.decalVue(id) | 0) : 0;
+    const o = mod(m.o0[id] + q * n + d, 4);
     return { o, angle: o + q * lisse(f), tourne: f > 0 };
   }
   const lisse = f => (f <= 0 ? 0 : f >= 1 ? 1 : f * f * (3 - 2 * f));
@@ -994,7 +1009,7 @@
   }
 
   const MoteurCube = {
-    CONFIG, PHASES, FAMILLES_CHIFFRE, FAMILLES_SALLE, REGIONS, OBJETS, PAR_RARETE, PALETTES, TRAITS, STADES, DIRS, OPPOSE,
+    CONFIG, PHASES, COULEURS_CUBE, FAMILLES_CHIFFRE, FAMILLES_SALLE, REGIONS, OBJETS, PAR_RARETE, PALETTES, TRAITS, STADES, DIRS, OPPOSE,
     h32, alea, mod, popc, M, encoderBrut, decoderBrut, chiffrer, dechiffrer, etapesFamille, cleSalle, formaterGroupe,
     creerMonde, slotXYZ, voisinSlot, directionEntre, instant, evenementsCycle, paliersColere,
     etatCircuit, compteMouv, circuitBouge, indiceSalleCircuit, salleIndiceCircuit, salleAuSlot, positionSalle, orientation,
