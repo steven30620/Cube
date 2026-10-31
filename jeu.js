@@ -1346,15 +1346,33 @@
     document.documentElement.style.setProperty('--k', k.toFixed(3));
     if (k >= 1) finTentative();
   }
-  function finTentative() {
+  function nettoyerJeu() {
     J.mode = 'menu'; delete document.body.dataset.cinematique; document.body.dataset.ecran = 'menu';
     $('#cinematique').hidden = true;
     if (J.vueEnsemble) { scene.remove(J.vueEnsemble); J.vueEnsemble = null; scene.fog.density = 0.024; }
     if (J.salle) { libererGroupe(J.salle.groupe); J.salle = null; }
     J.coques.forEach(c => libererGroupe(c.groupe)); J.coques.clear();
     if (J.figJoueur && J.figJoueur.racine.parent) J.figJoueur.racine.parent.remove(J.figJoueur.racine); J.figJoueur = null;
+    if (lumSortie) lumSortie.intensity = 0;
+    J.mortAnim = 0;
     N.quitterSalon();
-    rendreMenu();
+  }
+  function finTentative() { nettoyerJeu(); rendreMenu(); }
+  /** Débogage : le captif redevient captif et repart aussitôt de la première salle (sans laisser de corps). */
+  async function relancerEvasion(persoId) {
+    const perso = D.persos.find(p => p.id === persoId);
+    if (!perso || !J.debug || J.relance) return;
+    J.relance = true;
+    try {
+      if (J.mode === 'jeu' || J.mode === 'cinematique') { fermerPanneaux(); relacherCroix(); N.presence({ v: 0 }); nettoyerJeu(); }
+      perso.statut = 'captif';
+      if (!perso.equipement || !perso.equipement.length) perso.equipement = EQUIPEMENT[0].map(type => ({ type }));
+      const t = perso.tentatives && perso.tentatives[0];
+      if (t && t.issue === 'en cours') { t.issue = 'abandon'; t.fin = N.maintenant(); }
+      D.tentative = null; sauverTentative(); sauverPersos();
+      cacherNotification(); rendreMenu();
+      await entrer(perso.id);
+    } finally { J.relance = false; }
   }
   function quitter() {
     if (J.mode !== 'jeu') return;
@@ -1483,6 +1501,9 @@
       } else if (p.statut === 'cube' && D.tentative && D.tentative.perso === p.id) {
         const b1 = document.createElement('button'); b1.type = 'button'; b1.className = 'btn or'; b1.textContent = 'Reprendre la tentative'; b1.addEventListener('click', () => notifierEvasion(p)); act.appendChild(b1);
       }
+      if (J.debug && p.statut !== 'captif') {
+        const bd = document.createElement('button'); bd.type = 'button'; bd.className = 'btn debug'; bd.textContent = 'Relancer l’évasion (debug)'; bd.addEventListener('click', () => relancerEvasion(p.id)); act.appendChild(bd);
+      }
       info.appendChild(act);
       const ts = (p.tentatives || []).filter(x => x.issue !== 'en cours').slice(0, 3);
       if (ts.length) {
@@ -1581,6 +1602,7 @@
         if (e.key === 'Enter' && e.target.id === 'chat-saisie') { envoyerChat(e.target.value); e.target.value = ''; e.target.blur(); }
         return;
       }
+      if (e.code === 'F9' && J.debug && J.perso && (J.mode === 'jeu' || J.mode === 'cinematique')) { e.preventDefault(); relancerEvasion(J.perso.id); return; }
       if (J.mode !== 'jeu') return;
       J.touches[e.code] = true;
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab'].includes(e.code)) e.preventDefault();
@@ -1625,6 +1647,7 @@
     $('#btn-coffre').addEventListener('click', () => { if (J.panneau === 'coffre') fermerPanneaux(); else { fermerPanneaux(); ouvrirCoffreJeu(); } });
     $('#btn-aide').addEventListener('click', () => { if (J.panneau === 'aide') fermerPanneaux(); else ouvrirAide(); });
     $('#btn-quitter').addEventListener('click', quitter);
+    $('#btn-debug').addEventListener('click', () => { if (J.perso) relancerEvasion(J.perso.id); });
     $('#btn-son').addEventListener('click', () => { D.reglages.son = !D.reglages.son; A.init(); A.volume(D.reglages.son); $('#btn-son').textContent = D.reglages.son ? 'Son : oui' : 'Son : non'; sauverReglages(); });
     $('#btn-chat').addEventListener('click', () => { D.reglages.chatMasque = !D.reglages.chatMasque; sauverReglages(); rendreChat(); });
     $('#abaque-valider').addEventListener('click', validerAbaque);
@@ -1710,6 +1733,8 @@
     await N.init();
     await chargerJoueur();
     J.pret = true;
+    try { J.debug = N.user ? !!(await Promise.resolve(N.user.isOwner())) : true; } catch (e) { J.debug = !N.user; }
+    document.body.classList.toggle('debug', !!J.debug);
     rendreMenu();
     $('#btn-son').textContent = D.reglages.son ? 'Son : oui' : 'Son : non';
     requestAnimationFrame(boucle);

@@ -38,6 +38,8 @@
   .btn.or:hover { background: linear-gradient(#4a3916, #2e220e); }
   .mini { font-size: .72rem; padding: .05em .45em; margin-left: .35em; border: 1px solid rgba(201,162,74,.35); background: transparent; color: var(--cendre); cursor: pointer; border-radius: 2px; }
   .mini:hover { color: var(--or-pale); }
+  .btn.debug { display: none; border-style: dashed; border-color: #6a8fb0; color: #b9d3ea; }
+  body.debug .btn.debug { display: inline-flex; }
 
   /* ---------- scène 3D ---------- */
   #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
@@ -161,6 +163,7 @@
   .roue-ab canvas { width: 80px; height: 90px; border: 1px solid #5a4a2a; }
   .touches { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; }
   .touches dd { margin: 0; color: var(--cendre); }
+  .debug-aide { display: none; } body.debug .debug-aide { display: block; }
 
   /* ---------- chargement, fondu, dialogue ---------- */
   #chargement { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(5,5,5,.94); text-align: center; }
@@ -274,6 +277,7 @@
     <button type="button" class="btn" id="btn-coffre">Coffre <kbd>I</kbd></button>
     <button type="button" class="btn" id="btn-aide">Commandes <kbd>H</kbd></button>
     <button type="button" class="btn" id="btn-son">Son : oui</button>
+    <button type="button" class="btn debug" id="btn-debug" title="Recommencer l’évasion depuis la première salle">Relancer <kbd>F9</kbd></button>
     <button type="button" class="btn" id="btn-quitter">Quitter</button>
   </div>
 </div>
@@ -347,6 +351,7 @@
     <dt><kbd>I</kbd></dt><dd>Coffre</dd>
     <dt><kbd>Entrée</kbd></dt><dd>Parler aux personnes présentes dans la salle</dd>
     <dt><kbd>Échap</kbd></dt><dd>Fermer un panneau</dd>
+    <dt class="debug-aide"><kbd>F9</kbd></dt><dd class="debug-aide">Debug : relancer l’évasion depuis la première salle (même après une mort ou une libération)</dd>
     <dt>Bouton <kbd>A</kbd></dt><dd>Comme <kbd>E</kbd> : interagir, examiner, ramasser, monter (maintenir pour une herse)</dd>
     <dt>Bouton <kbd>B</kbd></dt><dd>Fermer un panneau ; sur le médaillon, descendre par la trappe ; ailleurs, courir tant qu’il est maintenu</dd>
     <dt>Manette branchée</dt><dd>Croix ou stick gauche pour se déplacer, A et B comme à l’écran</dd>
