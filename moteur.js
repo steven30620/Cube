@@ -853,6 +853,138 @@
   }
 
   // =====================================================================
+  // 8 bis. VERROUS À ÉNIGME DES PORTES
+  // Chaque porte (et chaque trappe) a son énigme, la même pour tous les
+  // joueurs : elle dépend de la graine, de la salle et de la face. La
+  // difficulté suit la région. La réponse est toujours un entier positif.
+  // =====================================================================
+  const COMPTES = [
+    ['les pattes d’une araignée', 8], ['les pattes d’un chien', 4], ['les pattes d’une grue', 2],
+    ['les faces d’un cube', 6], ['les arêtes d’un cube', 12], ['les sommets d’un cube', 8],
+    ['les saisons', 4], ['les mois de l’année', 12], ['les heures d’une journée', 24],
+    ['les doigts de deux mains', 10], ['les animaux du zodiaque chinois', 12], ['les cinq éléments', 5],
+    ['les côtés d’un hexagone', 6], ['les jours d’une semaine', 7], ['les pieds d’un tabouret à trois pieds', 3],
+    ['les trigrammes du Yi Jing', 8], ['les sabots d’un cheval', 4], ['les points cardinaux', 4],
+  ];
+  const MOTS_FOIS = ['', 'une', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept'];
+  const LUO_SHU = [[4, 9, 2], [3, 5, 7], [8, 1, 6]];
+  function enigmePorte(m, id, face) {
+    const sp = specSalle(m, id);
+    const r = alea(h32(m.graine, id, face + 1, 9191));
+    const z = sp.zone;
+    const types = z <= 0 ? ['suite', 'devinette', 'cage', 'balance']
+      : z <= 2 ? ['suite', 'devinette', 'cage', 'balance', 'soldats', 'carre']
+        : ['suite', 'devinette', 'cage', 'balance', 'soldats', 'carre', 'ages'];
+    const type = id === m.idLib ? 'soldats' : choisir(r, types);
+    switch (type) {
+      case 'suite': {
+        const gens = [
+          () => { const a = entre(r, 2, 20), d = entre(r, 3, 9 + z * 4); return k => a + d * k; },
+          () => { const a = entre(r, 1, 4), q = entre(r, 2, 3); return k => a * Math.pow(q, k); },
+          () => { const a = entre(r, 1, 6); return k => (k + a) * (k + a); },
+          () => { const f = [entre(r, 1, 5), entre(r, 2, 8)]; for (let i = 2; i < 8; i++) f.push(f[i - 1] + f[i - 2]); return k => f[k]; },
+          () => { const a = entre(r, 2, 9), d = entre(r, 1, 4), e = entre(r, 1, 3); return k => a + d * k + e * k * (k - 1); },
+          () => { const c = entre(r, 1, 3); return k => Math.pow(2, k + 2) - c; },
+          () => { const a = entre(r, 5, 15), b = entre(r, 40, 60), d1 = entre(r, 2, 5), d2 = entre(r, 3, 7); return k => (k % 2 === 0 ? a + d1 * (k / 2) : b - d2 * ((k - 1) / 2)); },
+          () => { const p = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53]; const st = entre(r, 0, 7); return k => p[st + k]; },
+          () => { const a = entre(r, 1, 4); return k => (k + a) * (k + a + 1) / 2; },
+        ];
+        const g = gens[Math.floor(r() * (z <= 0 ? 4 : z <= 2 ? 7 : gens.length))]();
+        const termes = [0, 1, 2, 3, 4, 5].map(g), trou = entre(r, 2, 5);
+        const enBatons = z >= 4;
+        return {
+          type, titre: 'La suite gravée', reponse: termes[trou],
+          lignes: [enBatons ? 'Six nombres sont gravés en bâtonnets sur la plaque du verrou. L’un d’eux est caché sous un sceau rouge.' : 'Six nombres sont gravés sur la plaque du verrou. L’un d’eux est caché sous un sceau rouge :',
+            enBatons ? '' : termes.map((v, i) => (i === trou ? '?' : String(v))).join('  ·  '),
+            'Ils obéissent tous à la même loi. Quel nombre se cache sous le sceau ?'].filter(Boolean),
+          figure: enBatons ? { batons: termes, trou } : null,
+        };
+      }
+      case 'devinette': {
+        const sac = COMPTES.slice(); const pris = [];
+        for (let i = 0; i < 4; i++) pris.push(sac.splice(Math.floor(r() * sac.length), 1)[0]);
+        const [A, B, C, Dd] = pris;
+        let lignes, reponse;
+        if (z <= 1) { reponse = A[1] * B[1] + C[1]; lignes = ['Prends ' + A[0] + '.', 'Multiplie-les par ' + B[0] + '.', 'Ajoute ' + C[0] + '.', 'Quel nombre tiens-tu ?']; }
+        else if (z <= 3) {
+          const base = A[1] * B[1] + C[1];
+          const retirables = sac.concat([Dd]).filter(x => x[1] < base);
+          const Rr = retirables.length ? choisir(r, retirables) : ['les pieds d’un tabouret à trois pieds', 3];
+          pris[3] = Rr;
+          reponse = base - Rr[1];
+          lignes = ['Prends ' + A[0] + '.', 'Multiplie-les par ' + B[0] + '.', 'Ajoute ' + C[0] + ', puis retire ' + pris[3][0] + '.', 'Quel nombre tiens-tu ?'];
+        } else {
+          const d = Dd[1] > 2 ? Dd[1] : 7;
+          reponse = (A[1] * B[1] + C[1]) % d;
+          if (reponse === 0) reponse = d;
+          lignes = ['Prends ' + A[0] + ', multiplie-les par ' + B[0] + ' et ajoute ' + C[0] + '.', 'Range ce total en tas de ' + d + '.', 'Combien en reste-t-il dans le dernier tas, s’il n’est pas complet ? (S’il est complet, réponds ' + d + '.)'];
+        }
+        return { type, titre: 'L’énigme du gardien', lignes, reponse, figure: null };
+      }
+      case 'cage': {
+        const lap = entre(r, 4, 10 + z * 5), fai = entre(r, 4, 14 + z * 5), arai = z >= 3 ? entre(r, 2, 4) : 0;
+        const tetes = lap + fai + arai, pattes = 4 * lap + 2 * fai + 8 * arai;
+        const demande = r() < 0.5 ? 'lapins' : 'faisans';
+        const lignes = ['Dans une cage du marché, on a enfermé des faisans et des lapins.'];
+        if (arai) lignes.push('Au plafond de la cage pendent aussi ' + arai + ' araignées, que l’on a comptées avec le reste.');
+        lignes.push('On compte ' + tetes + ' têtes et ' + pattes + ' pattes.', 'Combien y a-t-il de ' + demande + ' ?');
+        return { type, titre: 'La cage du marché', lignes, reponse: demande === 'lapins' ? lap : fai, figure: null };
+      }
+      case 'soldats': {
+        const mods = z >= 4 || id === m.idLib ? [3, 5, 7, 11] : [3, 5, 7];
+        const prod = mods.reduce((a, b) => a * b, 1);
+        const n = entre(r, 10, prod - 1);
+        const restes = mods.map(q => n % q);
+        const lignes = ['Le général Han Xin fait compter ses soldats.']
+          .concat(mods.map((q, i) => 'En rangs de ' + q + ', il en reste ' + restes[i] + '.'))
+          .concat(['Combien a-t-il de soldats, au minimum ?']);
+        return { type, titre: 'Le compte de Han Xin', lignes, reponse: n, figure: null };
+      }
+      case 'carre': {
+        let g = LUO_SHU.map(l => l.slice());
+        const rot = entre(r, 0, 3), miroir = r() < 0.5;
+        for (let i = 0; i < rot; i++) g = g[0].map((_, j) => g.map(l => l[j]).reverse());
+        if (miroir) g = g.map(l => l.slice().reverse());
+        const k = z >= 3 ? entre(r, 2, 3) : 1, c = entre(r, 0, 4 + z * 3);
+        g = g.map(l => l.map(v => v * k + c));
+        const cases = []; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) if (i !== 1 || j !== 1) cases.push([i, j]);
+        const [ti, tj] = choisir(r, cases);
+        const caches = [[ti, tj]];
+        const autres = cases.filter(([i, j]) => i !== ti && !(i === ti && j === tj));
+        const nb = z >= 3 ? 3 : 1;
+        for (let n = 0; n < nb && autres.length; n++) caches.push(autres.splice(Math.floor(r() * autres.length), 1)[0]);
+        return {
+          type, titre: 'La tortue de Luo', reponse: g[ti][tj],
+          lignes: ['Sur la carapace de la tortue sacrée, chaque ligne, chaque colonne et chaque diagonale donnent la même somme.', 'Quel nombre faut-il graver à la place du point d’interrogation ?'],
+          figure: { carre: g, caches: caches.map(([i, j]) => i * 3 + j), cible: ti * 3 + tj },
+        };
+      }
+      case 'balance': {
+        const x = entre(r, 3, 9 + z * 3), a = entre(r, 3, 7), c = entre(r, 1, a - 1), b = entre(r, 1, 20);
+        const d = (a - c) * x + b;
+        return {
+          type, titre: 'La balance du marchand', reponse: x, figure: null,
+          lignes: ['Sur la balance du marchand, ' + a + ' jarres et ' + b + ' poids de bronze font exactement équilibre avec ' + c + ' jarre' + (c > 1 ? 's' : '') + ' et ' + d + ' poids.', 'Toutes les jarres sont identiques. Combien de poids pèse une jarre ?'],
+        };
+      }
+      case 'ages': {
+        let d = 0, k = 0, j = 0, n = 0;
+        for (let essai = 0; essai < 200; essai++) {
+          d = entre(r, 4, 14); k = entre(r, 3, 6); j = entre(r, 2, k - 1);
+          const num = d * (k - j), den = j - 1;
+          if (num % den === 0 && num / den > 0 && num / den <= 40) { n = num / den; break; }
+        }
+        if (!n) { d = 5; k = 4; j = 2; n = 10; }
+        return {
+          type, titre: 'Le maître et le disciple', reponse: d, figure: null,
+          lignes: ['Aujourd’hui, le maître a ' + MOTS_FOIS[k] + ' fois l’âge de son disciple.', 'Dans ' + n + ' ans, il n’aura plus que ' + MOTS_FOIS[j] + ' fois son âge.', 'Quel âge a le disciple aujourd’hui ?'],
+        };
+      }
+    }
+    return { type: 'suite', titre: 'La suite gravée', lignes: ['1 · 2 · 3 · ?'], reponse: 4, figure: null };
+  }
+
+  // =====================================================================
   // 9. AUTO-TEST DU MOTEUR (vecteur de référence fourni)
   // =====================================================================
   function autoTest() {
@@ -867,7 +999,7 @@
     creerMonde, slotXYZ, voisinSlot, directionEntre, instant, evenementsCycle, paliersColere,
     etatCircuit, compteMouv, circuitBouge, indiceSalleCircuit, salleIndiceCircuit, salleAuSlot, positionSalle, orientation,
     slotImplique, etatPorte, porteMonde, faceVersMonde, mondeVersFace, sortieOuverte, prochainMouvement, alerte, codePorte,
-    specSalle, zoneDe, stadeCorps, cibleTeleport, autoTest,
+    specSalle, zoneDe, stadeCorps, cibleTeleport, enigmePorte, autoTest,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = MoteurCube;
   else racine.MoteurCube = MoteurCube;

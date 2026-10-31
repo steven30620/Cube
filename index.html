@@ -150,6 +150,17 @@
   #cadran .tiret { color: var(--cendre); padding: 0 1px; }
   #plaque-etat { margin: 14px 0 4px; font-family: var(--f-titre); font-size: 1.05rem; }
   #plaque-obs { margin: 0; color: var(--cendre); font-size: .85rem; }
+  #verrou { margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(201,162,74,.3); }
+  #verrou-titre { font-size: 1.15rem; color: #f1e2b9; margin-bottom: 8px; }
+  #verrou-texte { white-space: pre-line; max-width: 62ch; margin: 0 0 12px; font-size: 1rem; }
+  #verrou-figure { display: block; max-width: 100%; margin: 0 0 12px; border: 1px solid #5a4a2a; }
+  #verrou-figure[hidden] { display: none; }
+  #verrou-form .ligne { display: flex; gap: 8px; flex-wrap: wrap; }
+  #verrou-reponse { width: 10ch; font-family: var(--f-titre); font-size: 1.4rem; font-variant-numeric: tabular-nums; background: #050505; border: 1px solid var(--or); color: #f1e2b9; padding: .2em .5em; }
+  #verrou-etat { margin: 10px 0 0; color: var(--cendre); font-size: .9rem; }
+  #verrou-etat.ouvert { color: #8fd3b0; } #verrou-etat.faux { color: #e07a6a; }
+  #dialogue-corps { white-space: pre-line; max-width: 62ch; }
+  .entree.enigme { border-left-color: #6fb7ff; } .entree.enigme .corps { font-family: var(--f-texte); font-size: .9rem; }
   #panneau-texte-corps { max-width: 62ch; margin: 0; font-size: 1rem; }
   #carnet-liste { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 8px; max-height: 46vh; overflow-y: auto; }
   .entree { border-left: 2px solid rgba(201,162,74,.35); padding: 4px 10px; background: rgba(0,0,0,.25); }
@@ -303,10 +314,21 @@
 <!-- ===================== PANNEAUX ===================== -->
 <section class="panneau" id="panneau-plaque" hidden aria-label="Plaque de la porte">
   <button type="button" class="mini fermer" data-fermer>Fermer</button>
-  <h3>Plaque de bronze</h3>
-  <div class="plaque-grille">
+  <h3 id="plaque-titre">Plaque de bronze</h3>
+  <div class="plaque-grille" id="plaque-grille">
     <div><p class="legende">Sceau gravé</p><canvas id="sceau" width="320" height="230"></canvas></div>
     <div><p class="legende">Cadran</p><div id="cadran"></div><p id="plaque-etat"></p><p id="plaque-obs"></p></div>
+  </div>
+  <div id="verrou">
+    <p class="legende">Verrou à énigme</p>
+    <h4 id="verrou-titre"></h4>
+    <p id="verrou-texte"></p>
+    <canvas id="verrou-figure" hidden></canvas>
+    <form id="verrou-form" autocomplete="off">
+      <label for="verrou-reponse" class="legende">Ta réponse</label>
+      <div class="ligne"><input type="text" id="verrou-reponse" inputmode="numeric" maxlength="7" placeholder="Un nombre"><button type="submit" class="btn or">Tourner la clé</button></div>
+    </form>
+    <p id="verrou-etat"></p>
   </div>
 </section>
 <section class="panneau" id="panneau-texte" hidden aria-labelledby="panneau-texte-titre">
@@ -343,7 +365,7 @@
   <dl class="touches">
     <dt><kbd>Z</kbd> <kbd>Q</kbd> <kbd>S</kbd> <kbd>D</kbd> · flèches</dt><dd>Se déplacer (ou la manette en bas de l’écran, à maintenir)</dd>
     <dt><kbd>Maj</kbd></dt><dd>Courir</dd>
-    <dt><kbd>E</kbd></dt><dd>Interagir, examiner, ramasser, monter</dd>
+    <dt><kbd>E</kbd></dt><dd>Interagir, examiner, ramasser, monter. Chaque porte et chaque trappe est fermée par un verrou à énigme : examine sa plaque pour le résoudre</dd>
     <dt><kbd>F</kbd></dt><dd>Descendre par la trappe</dd>
     <dt>Clic</dt><dd>Examiner ce qui est à portée</dd>
     <dt>Molette</dt><dd>Rapprocher ou éloigner la vue</dd>

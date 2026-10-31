@@ -416,6 +416,7 @@
     J.perso = perso;
     J.memoire = { salles: new Map() };
     J.gains = []; J.deso = 0; J.chat = []; J.declencheurs = []; J.enigmes.clear(); J.fossesOuvertes.clear();
+    J.verrous = new Set(reprise && Array.isArray(reprise.ouvertes) ? reprise.ouvertes : []); J.verrouGrippe = 0;
     rendreChat();
     let cube = J.monde.idEntree, x = 0, z = 3.2;
     if (reprise && reprise.cube && reprise.cube <= J.monde.nbSalles) { cube = reprise.cube; x = clamp(+reprise.x || 0, -5, 5); z = clamp(+reprise.z || 0, -5, 5); }
@@ -427,7 +428,7 @@
         afficherChargement('La salle d’entrée est occupée. Le mécanisme attend…');
         await dormir(3000);
       }
-      D.tentative = { perso: perso.id, inst, cube, x, z, debut: N.maintenant() };
+      D.tentative = { perso: perso.id, inst, cube, x, z, debut: N.maintenant(), ouvertes: [] };
       perso.statut = 'cube';
       perso.tentatives.unshift({ debut: N.maintenant(), inst, issue: 'en cours', objets: [] });
       if (perso.tentatives.length > 30) perso.tentatives.length = 30;
@@ -537,7 +538,9 @@
         if (s.traits.temps && !s.traits.temps.ouvert(t)) bloque = 'temps';
         if (s.traits.condamnee && s.traits.condamnee.scelle(t)) bloque = 'scelle';
         if (!enigmeOk) bloque = 'enigme';
+        if (!J.verrous.has(s.id + ':' + f)) bloque = 'verrou';
       } else if (f === 4 && s.traits.escalier && s.traits.escalier.etat(t) === 2) bloque = 'echelle';
+      if (f >= 4 && !J.verrous.has(s.id + ':' + f)) bloque = 'verrou';
       res.push({ f, dir, ep, bloque, passable: (ep.etat === 'ouverte' || ep.etat === 'sortie') && !bloque });
     }
     return res;
@@ -599,9 +602,10 @@
       if (jo.vivant && !jo.traversee && !jo.montee) {
         const r = 0.31 - J.perso.stats.agilite * 0.0008;
         let cause = null;
-        for (const p of s.pieges) { cause = p.danger(t, jo.x, jo.z, r, ctx); if (cause) break; }
-        if (!cause) cause = dangerSalves(t, jo.x, jo.z, r);
-        if (cause) mourir(cause, t);
+        let piege = null;
+        for (const p of s.pieges) { cause = p.danger(t, jo.x, jo.z, r, ctx); if (cause) { piege = p.type; break; } }
+        if (!cause) { cause = dangerSalves(t, jo.x, jo.z, r); if (cause) piege = 'salve'; }
+        if (cause) mourir(cause, t, piege);
         else declencheursLocaux(t, ctx);
       }
     } else if (J.mortAnim) {
@@ -720,7 +724,7 @@
     if (court && J.salle.traits.bruit) J.bruitCourse = t;
     // obstacles
     const obs = J.salle.obstacles.slice();
-    for (const p of J.salle.pieges) if (p.obstacles) p.obstacles(t, ctx, obs);
+    for (const p of J.salle.pieges) if (p.obstacles) { const n0 = obs.length; p.obstacles(t, ctx, obs); for (let i = n0; i < obs.length; i++) obs[i].piege = p.type; }
     // limites et portes
     const B = DM - EP / 2 - r;
     const lim = (val, axeX) => {
@@ -755,7 +759,7 @@
           const opts = [[o.x0 - r - nx, 0], [o.x1 + r - nx, 0], [0, o.z0 - r - nz], [0, o.z1 + r - nz]];
           opts.sort((a, b) => Math.abs(a[0] + a[1]) - Math.abs(b[0] + b[1])); nx += opts[0][0]; nz += opts[0][1];
         }
-        if (o.mobile || o.pousse) { const bx = clamp(nx, -B, B), bz = clamp(nz, -B, B); if ((Math.abs(bx - nx) > 0.05 || Math.abs(bz - nz) > 0.05) && !dansEmbrasure) { nx = bx; nz = bz; const cx2 = clamp(nx, o.x0, o.x1), cz2 = clamp(nz, o.z0, o.z1); if (Math.hypot(nx - cx2, nz - cz2) < r * 0.6) { mourir('ecrase', t); return; } } }
+        if (o.mobile || o.pousse) { const bx = clamp(nx, -B, B), bz = clamp(nz, -B, B); if ((Math.abs(bx - nx) > 0.05 || Math.abs(bz - nz) > 0.05) && !dansEmbrasure) { nx = bx; nz = bz; const cx2 = clamp(nx, o.x0, o.x1), cz2 = clamp(nz, o.z0, o.z1); if (Math.hypot(nx - cx2, nz - cz2) < r * 0.6) { mourir('ecrase', t, o.piege); return; } } }
       }
     }
     jo.x = nx; jo.z = nz;
@@ -763,7 +767,7 @@
   // obstacles mobiles même quand le joueur ne bouge pas
   function pousserImmobile(t, ctx) {
     const jo = J.joueur, obs = [], r = 0.32, B = DM - EP / 2 - r;
-    for (const p of J.salle.pieges) if (p.obstacles) p.obstacles(t, ctx, obs);
+    for (const p of J.salle.pieges) if (p.obstacles) { const n0 = obs.length; p.obstacles(t, ctx, obs); for (let i = n0; i < obs.length; i++) obs[i].piege = p.type; }
     for (const o of obs) {
       if (!o.mobile && !o.pousse) continue;
       const cx = clamp(jo.x, o.x0, o.x1), cz = clamp(jo.z, o.z0, o.z1);
@@ -772,7 +776,7 @@
         if (d2 > 1e-6) { const d = Math.sqrt(d2); jo.x = cx + dx / d * r; jo.z = cz + dz / d * r; }
         else { const opts = [[o.x0 - r - jo.x, 0], [o.x1 + r - jo.x, 0], [0, o.z0 - r - jo.z], [0, o.z1 + r - jo.z]]; opts.sort((a, b) => Math.abs(a[0] + a[1]) - Math.abs(b[0] + b[1])); jo.x += opts[0][0]; jo.z += opts[0][1]; }
         const bx = clamp(jo.x, -B, B), bz = clamp(jo.z, -B, B);
-        if (Math.abs(bx - jo.x) > 0.05 || Math.abs(bz - jo.z) > 0.05) { jo.x = bx; jo.z = bz; const c2x = clamp(jo.x, o.x0, o.x1), c2z = clamp(jo.z, o.z0, o.z1); if (Math.hypot(jo.x - c2x, jo.z - c2z) < r * 0.6) { mourir('ecrase', t); return; } }
+        if (Math.abs(bx - jo.x) > 0.05 || Math.abs(bz - jo.z) > 0.05) { jo.x = bx; jo.z = bz; const c2x = clamp(jo.x, o.x0, o.x1), c2z = clamp(jo.z, o.z0, o.z1); if (Math.hypot(jo.x - c2x, jo.z - c2z) < r * 0.6) { mourir('ecrase', t, o.piege); return; } }
       }
     }
   }
@@ -780,7 +784,7 @@
   function heurterPorte(e, t) {
     if (t - dernierHeurt < 1600) return; dernierHeurt = t;
     const et = e.ep.etat, b = e.bloque;
-    const txt = b === 'herse' ? 'Une herse barre le passage.' : b === 'temps' ? 'Les battants sont clos. L’eau coule dans la colonne de verre.' : b === 'scelle' ? 'Les portes se sont scellées.' : b === 'enigme' ? 'La porte ne cède pas. Le boulier semble relié au verrou.'
+    const txt = b === 'verrou' ? 'Un verrou à énigme retient les battants. Examine la plaque de bronze (A ou E).' : b === 'herse' ? 'Une herse barre le passage.' : b === 'temps' ? 'Les battants sont clos. L’eau coule dans la colonne de verre.' : b === 'scelle' ? 'Les portes se sont scellées.' : b === 'enigme' ? 'La porte ne cède pas. Le boulier semble relié au verrou.'
       : et === 'verrouillee' ? 'Un verrou de bronze est enclenché. Le sol vibre.' : et === 'vide' ? 'Derrière les barreaux, le vide. Un courant d’air glacé.' : et === 'aveugle' ? 'Les battants s’ouvrent sur une paroi.'
       : et === 'bord' ? 'Derrière les barreaux, une pierre épaisse et noire.' : et === 'condamnee' ? 'Des barres de fer condamnent le passage.' : 'La porte reste close.';
     message(txt); A.jouer('verrou', 0.5);
@@ -861,7 +865,7 @@
     const a = C.positionSalle(J.monde, ancien, it), b = C.positionSalle(J.monde, J.cube, it);
     if (C.slotXYZ(J.monde, a.slot).z !== C.slotXYZ(J.monde, b.slot).z) J.deso = Math.min(100, J.deso + 5);
     noterSalle();
-    D.tentative = Object.assign(D.tentative || {}, { cube: J.cube, x: J.joueur.x, z: J.joueur.z });
+    D.tentative = Object.assign(D.tentative || {}, { cube: J.cube, x: J.joueur.x, z: J.joueur.z, ouvertes: [...J.verrous].slice(-500) });
     sauverTentative();
     publierPresence(true);
   }
@@ -870,6 +874,7 @@
   function utiliserTrappe(haut) {
     const jo = J.joueur, f = haut ? 4 : 5, e = J.portes[f];
     if (!e) return;
+    if (e.bloque === 'verrou') { ouvrirPlaque(f); return; }
     if (!e.passable) { heurterPorte(e, N.maintenant()); return; }
     if (haut && J.salle.traits.escalier && J.salle.traits.escalier.etat(N.maintenant()) >= 1) {
       jo.montee = { haut, vers: 0, debut: performance.now(), duree: 900, chute: true };
@@ -886,7 +891,7 @@
   function majMontee(t, dt) {
     const jo = J.joueur, m = jo.montee, k = clamp((performance.now() - m.debut) / m.duree, 0, 1);
     const fig = J.figJoueur.racine;
-    if (m.chute) { fig.position.y = k < 0.5 ? k * 3 : 1.5 - (k - 0.5) * 6; if (k >= 1) { jo.montee = null; mourir('chute', t); } return; }
+    if (m.chute) { fig.position.y = k < 0.5 ? k * 3 : 1.5 - (k - 0.5) * 6; if (k >= 1) { jo.montee = null; mourir('chute', t, 'escalier'); } return; }
     fig.position.set(jo.x, (m.haut ? 1 : -1) * k * (CF.ESP_V * 0.6), jo.z);
     if (m.haut) { J.figJoueur.bG.rotation.x = -2.6 + Math.sin(k * 20) * 0.3; J.figJoueur.bD.rotation.x = -2.6 - Math.sin(k * 20) * 0.3; }
     if (k >= 1) {
@@ -1134,9 +1139,15 @@
     return code;
   }
   function ouvrirPlaque(face) {
-    const code = copierPlaque(face, false), sp = J.salle.spec;
+    const sp = J.salle.spec;
     J.panneau = 'plaque';
     const p = $('#panneau-plaque'); p.hidden = false;
+    afficherVerrou(face);
+    // les trappes n'ont pas de plaque : seulement le verrou
+    $('#plaque-grille').hidden = face >= 4;
+    $('#plaque-titre').textContent = face >= 4 ? (face === 4 ? 'Verrou de la trappe du plafond' : 'Verrou de la trappe du sol') : 'Plaque de bronze';
+    if (face >= 4) return;
+    const code = copierPlaque(face, false);
     dessinerSceau($('#sceau'), sp, face);
     const cad = $('#cadran'); cad.innerHTML = '';
     code.groupes.forEach((g, i) => {
@@ -1162,6 +1173,70 @@
         copierPlaque(face, false);
       }
     }, 400);
+  }
+  // ---------- verrous à énigme ----------
+  function afficherVerrou(face) {
+    const cle = J.cube + ':' + face, ouvert = J.verrous.has(cle);
+    const e = C.enigmePorte(J.monde, J.cube, face);
+    J.verrouOuvert = { face, e, cle };
+    $('#verrou-titre').textContent = e.titre;
+    $('#verrou-texte').textContent = e.lignes.join('\n');
+    const fig = $('#verrou-figure');
+    fig.hidden = !e.figure;
+    if (e.figure) dessinerFigure(fig, e.figure);
+    $('#verrou-form').hidden = ouvert;
+    $('#verrou-etat').textContent = ouvert ? 'Le verrou est ouvert. Les battants sont libres.' : 'La réponse est un nombre entier.';
+    $('#verrou-etat').className = ouvert ? 'ouvert' : '';
+    $('#verrou-reponse').value = '';
+    if (!ouvert) {
+      const sp = J.salle.spec, deja = J.carnet.entrees.some(x => x.type === 'enigme' && x.cle === cle);
+      if (!deja) { J.carnet.entrees.unshift({ t: N.maintenant(), type: 'enigme', cle, salle: decrireSalle(sp), points: face + 1, titre: e.titre, texte: e.lignes.join(' '), dent: J.it.p }); J.carnetModifie = true; }
+      setTimeout(() => { if (J.panneau === 'plaque') $('#verrou-reponse').focus({ preventScroll: true }); }, 60);
+    }
+  }
+  function essayerVerrou() {
+    const v = J.verrouOuvert; if (!v || !J.joueur || !J.joueur.vivant) return;
+    const t = N.maintenant();
+    if (t < J.verrouGrippe) { $('#verrou-etat').textContent = 'Le mécanisme est encore grippé. Attends un instant.'; return; }
+    const brut = $('#verrou-reponse').value.replace(/[\s.]/g, '');
+    const n = /^\d{1,7}$/.test(brut) ? parseInt(brut, 10) : NaN;
+    if (Number.isNaN(n)) { $('#verrou-etat').textContent = 'Écris un nombre entier, en chiffres.'; return; }
+    if (n === v.e.reponse) {
+      J.verrous.add(v.cle);
+      D.tentative = Object.assign(D.tentative || {}, { ouvertes: [...J.verrous].slice(-500) }); sauverTentative();
+      A.jouer('cloche', 0.6); A.jouer('porte', 0.8);
+      $('#verrou-form').hidden = true; $('#verrou-etat').textContent = 'Un déclic. Le verrou est ouvert.'; $('#verrou-etat').className = 'ouvert';
+      message('Le verrou cède dans un déclic.');
+    } else {
+      J.verrouGrippe = t + 4000;
+      A.jouer('verrou', 0.8);
+      $('#verrou-etat').textContent = 'Le verrou grince et se grippe. Ce n’est pas le bon nombre.'; $('#verrou-etat').className = 'faux';
+    }
+  }
+  function dessinerFigure(cv, f) {
+    const x = cv.getContext('2d');
+    if (f.carre) {
+      cv.width = 300; cv.height = 300;
+      x.fillStyle = '#1a1410'; x.fillRect(0, 0, 300, 300);
+      x.strokeStyle = '#c9a24a'; x.lineWidth = 3;
+      for (let i = 0; i <= 3; i++) { x.beginPath(); x.moveTo(15 + i * 90, 15); x.lineTo(15 + i * 90, 285); x.stroke(); x.beginPath(); x.moveTo(15, 15 + i * 90); x.lineTo(285, 15 + i * 90); x.stroke(); }
+      x.font = '700 38px "Shippori Mincho B1", Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      for (let k = 0; k < 9; k++) {
+        const i = Math.floor(k / 3), j = k % 3, cx = 60 + j * 90, cy = 60 + i * 90;
+        if (k === f.cible) { x.fillStyle = '#a3271f'; x.fillText('?', cx, cy); }
+        else if (f.caches.includes(k)) { x.fillStyle = '#4a3a20'; x.beginPath(); x.arc(cx, cy, 16, 0, Math.PI * 2); x.fill(); }
+        else { x.fillStyle = '#e8d7a8'; x.fillText(String(f.carre[i][j]), cx, cy); }
+      }
+    } else if (f.batons) {
+      cv.width = 560; cv.height = 130;
+      x.fillStyle = '#1a1410'; x.fillRect(0, 0, 560, 130);
+      x.strokeStyle = '#c9a24a'; x.lineWidth = 3; x.strokeRect(4, 4, 552, 122);
+      f.batons.forEach((v, i) => {
+        const cx = 52 + i * 91;
+        if (i === f.trou) { x.fillStyle = '#a3271f'; x.fillRect(cx - 26, 38, 52, 52); return; }
+        R.dessinerBatonnets(x, v, cx, 65, 0.85, '#e8d7a8');
+      });
+    }
   }
   function dessinerSceau(cv, sp, face) {
     const x = cv.getContext('2d'), w = cv.width, h = cv.height;
@@ -1264,6 +1339,7 @@
       li.appendChild(h);
       const b = document.createElement('div'); b.className = 'corps';
       if (e.type === 'plaque') b.textContent = '•'.repeat(e.points) + '   ' + e.groupes.join(' – ');
+      else if (e.type === 'enigme') b.textContent = (e.points <= 4 ? '•'.repeat(e.points) + '   ' : '') + e.titre + ' — ' + e.texte;
       else if (e.type === 'corps') b.textContent = e.texte;
       else b.textContent = 'Entrée dans une salle.';
       li.appendChild(b); l.appendChild(li);
@@ -1276,9 +1352,9 @@
   // =====================================================================
   // MORT ET LIBÉRATION
   // =====================================================================
-  function mourir(cause, t) {
+  function mourir(cause, t, piege) {
     const jo = J.joueur; if (!jo.vivant) return;
-    jo.vivant = false; J.mortAnim = t; J.causeMort = cause;
+    jo.vivant = false; J.mortAnim = t; J.causeMort = cause; J.piegeMort = piege || null;
     A.jouer('mort');
     $('#invite').hidden = true; fermerPanneaux();
     publierPresence(true);
@@ -1292,7 +1368,7 @@
     } else { I.corps.set(id, Object.assign({ id }, corps)); tombes.forEach((o, i) => I.sol.set(id + '-' + i, Object.assign({ id: id + '-' + i }, o))); sauverInstanceLocale(); }
     J.perso.equipement = [];
     J.perso.statut = 'mort';
-    const tent = J.perso.tentatives[0]; if (tent) { tent.fin = N.maintenant(); tent.issue = 'mort'; tent.cause = cause; }
+    const tent = J.perso.tentatives[0]; if (tent) { tent.fin = N.maintenant(); tent.issue = 'mort'; tent.cause = cause; tent.piege = piege || null; }
     sauverPersos(); D.tentative = null; sauverTentative();
     if (J.carnetModifie) { J.carnetModifie = false; ecrireDoc(cheminJoueur('carnet-' + J.perso.id), J.carnet); }
     setTimeout(() => cinematique('mort'), 900);
@@ -1313,7 +1389,8 @@
     $('#cinematique').hidden = false;
     $('#cin-titre').textContent = type === 'mort' ? '' : 'LIBRE';
     $('#cin-l1').textContent = type === 'mort' ? J.perso.nom + ' ne quittera pas le Cube.' : J.perso.nom + ' a franchi la dernière porte.';
-    $('#cin-l2').textContent = type === 'mort' ? 'Son corps restera là où il est tombé.' : 'Derrière, la structure continue de tourner, sans lui.';
+    const ex = type === 'mort' && J.piegeMort && EXPLICATIONS[J.piegeMort];
+    $('#cin-l2').textContent = type === 'mort' ? (ex ? 'Tué par : ' + ex.nom + '.' : 'Son corps restera là où il est tombé.') : 'Derrière, la structure continue de tourner, sans lui.';
     $('#cin-l3').textContent = J.gains.length ? 'Ce que tes mains ont pris t’appartient : ' + J.gains.map(g => g.nom).join(', ') + '.' : (type === 'mort' ? 'Ses mains sont vides.' : 'Il ne rapporte que sa vie.');
     if (type === 'liberte') {
       A.jouer('liberte');
@@ -1357,7 +1434,17 @@
     J.mortAnim = 0;
     N.quitterSalon();
   }
-  function finTentative() { nettoyerJeu(); rendreMenu(); }
+  function finTentative() {
+    const mort = J.cin && J.cin.type === 'mort', piege = J.piegeMort;
+    nettoyerJeu(); rendreMenu();
+    if (mort) expliquerMort(piege, J.causeMort);
+  }
+  /** Après une mort : ce qui l'a tué, comment ça marche, le signe annonciateur, comment l'éviter. */
+  function expliquerMort(piege, cause) {
+    const ex = EXPLICATIONS[piege];
+    if (!ex) { ouvrirTexteMenu('Ce qui s’est passé', 'Cause de la mort : ' + causeTexte(cause || 'inconnu') + '.'); return; }
+    ouvrirTexteMenu('Tué par : ' + ex.nom, ex.comment + '\n\nLe signe : ' + ex.signe + '\n\nPour passer : ' + ex.conseil);
+  }
   /** Débogage : le captif redevient captif et repart aussitôt de la première salle (sans laisser de corps). */
   async function relancerEvasion(persoId) {
     const perso = D.persos.find(p => p.id === persoId);
@@ -1398,7 +1485,7 @@
     afficherChargement(perso.nom + ' s’avance seul dans le noir…');
     await ouvrirInstance(INSTANCES[0]);
     const m = C.creerMonde(I.graine, I.t0), st = perso.stats;
-    let t = N.maintenant(), cube = m.idEntree, salles = 0, mort = null;
+    let t = N.maintenant(), cube = m.idEntree, salles = 0, mort = null, piegeEgare = null;
     const vus = new Map(), journal = [], gains = [];
     const pLire = 0.12 + st.intelligence * 0.006;
     const finMax = t + 2.5 * 3600e3;
@@ -1427,13 +1514,14 @@
       const danger = vsp.pieges.length ? (0.006 + vsp.zone * 0.006 + (vsp.famille >= 22 ? 0.05 : 0)) * vsp.pieges.length : 0.001;
       const p = danger * (1 + it.colere / 150) * (1 - st.agilite * 0.005) * (1 - st.sangFroid * 0.003);
       t += 6000 + Math.random() * 9000 * (1 - st.agilite * 0.004);
+      t += 20000 + Math.random() * 70000 * (1 - st.intelligence * 0.008); // le verrou à énigme
       cube = choix.v; salles++;
       if (Math.random() < p) {
         const types = vsp.pieges.map(x => x.type);
         const carte = { pointes: 'pointes', lamesMur: 'lames', pendule: 'lames', broyeur: 'ecrase', plafond: 'ecrase', flammes: 'brule', statue: 'brule', lumiere: 'brule', fleches: 'fleches', dalle: 'fleches', fosses: 'chute', solDerobe: 'chute', plateforme: 'chute', scie: 'scie', engrenages: 'broye', rouleau: 'ecrase', herse: 'ecrase' };
-        const k = types.find(x => carte[x]); mort = k ? carte[k] : 'chute';
+        const k = types.find(x => carte[x]); mort = k ? carte[k] : 'chute'; piegeEgare = k || null;
       }
-      if (salles % 15 === 0) journal.push('Il a perdu le compte des salles. Les murs se ressemblent.');
+      if (salles === 15) journal.push('Il a perdu le compte des salles. Les murs se ressemblent.');
     }
     if (!mort) { mort = 'epuisement'; journal.push('La soif, puis le sommeil.'); }
     // réclamations (atomiques, même règle que pour un joueur)
@@ -1447,7 +1535,7 @@
     const tent = perso.tentatives[0]; tent.fin = t; tent.objets = gardes;
     if (mort === 'evade') { perso.statut = 'evade'; tent.issue = 'evade'; }
     else {
-      perso.statut = 'mort'; tent.issue = 'mort'; tent.cause = mort;
+      perso.statut = 'mort'; tent.issue = 'mort'; tent.cause = mort; tent.piege = piegeEgare;
       const corps = { cube, x: (Math.random() - 0.5) * 6, z: (Math.random() - 0.5) * 6, a: Math.random() * TAU, cause: mort, t, look: perso.look, nom: perso.nom, perso: perso.id };
       const id = idDoc();
       if (N.db) N.db.doc('instances/' + I.id + '/corps/' + id).set(corps).catch(() => {}); else { I.corps.set(id, Object.assign({ id }, corps)); sauverInstanceLocale(); }
@@ -1458,7 +1546,8 @@
     cacherChargement(); rendreMenu();
     const dur = Math.round((t - tent.debut) / 60000);
     ouvrirTexteMenu(mort === 'evade' ? perso.nom + ' est sorti' : perso.nom + ' n’est pas revenu',
-      (mort === 'evade' ? 'Après ' + dur + ' minutes, il a trouvé la lumière.' : 'Après ' + dur + ' minutes d’errance, plus rien.') + ' ' + tent.journal.join(' ') + (gardes.length ? ' Rapporté dans ton Coffre : ' + gardes.join(', ') + '.' : ' Aucun objet rapporté.'));
+      (mort === 'evade' ? 'Après ' + dur + ' minutes, il a trouvé la lumière.' : 'Après ' + dur + ' minutes d’errance, plus rien.') + ' ' + tent.journal.join(' ') + (gardes.length ? ' Rapporté dans ton Coffre : ' + gardes.join(', ') + '.' : ' Aucun objet rapporté.')
+      + (piegeEgare && EXPLICATIONS[piegeEgare] ? '\n\nTué par : ' + EXPLICATIONS[piegeEgare].nom + '. ' + EXPLICATIONS[piegeEgare].comment : ''));
   }
 
   // =====================================================================
@@ -1508,7 +1597,7 @@
       const ts = (p.tentatives || []).filter(x => x.issue !== 'en cours').slice(0, 3);
       if (ts.length) {
         const hi = document.createElement('ul'); hi.className = 'histo';
-        ts.forEach(x => { const li2 = document.createElement('li'); const d = new Date(x.debut).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); li2.textContent = d + ' — ' + (x.issue === 'evade' ? 'évadé' : 'mort' + (x.cause ? ' (' + causeTexte(x.cause) + ')' : '')) + (x.objets && x.objets.length ? ' · ' + x.objets.length + ' objet' + (x.objets.length > 1 ? 's' : '') + ' rapporté' + (x.objets.length > 1 ? 's' : '') : '') + (x.autonome ? ' · seul' : ''); hi.appendChild(li2); });
+        ts.forEach(x => { const li2 = document.createElement('li'); const d = new Date(x.debut).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }); li2.textContent = d + ' — ' + (x.issue === 'evade' ? 'évadé' : x.issue === 'abandon' ? 'relancé (debug)' : 'mort' + (x.piege && EXPLICATIONS[x.piege] ? ' (' + EXPLICATIONS[x.piege].nom.toLowerCase() + ')' : x.cause ? ' (' + causeTexte(x.cause) + ')' : '')) + (x.objets && x.objets.length ? ' · ' + x.objets.length + ' objet' + (x.objets.length > 1 ? 's' : '') + ' rapporté' + (x.objets.length > 1 ? 's' : '') : '') + (x.autonome ? ' · seul' : ''); hi.appendChild(li2); });
         info.appendChild(hi);
       }
       li.appendChild(info); l.appendChild(li);
@@ -1516,6 +1605,34 @@
     rendreCoffre($('#coffre-menu'));
     $('#mode-reseau').textContent = N.db && !N.uid ? 'Identité non reçue : ton Coffre et tes captifs restent sur cet appareil. Recharge la page pour réessayer.' : N.db && N.uid ? (N.peutEcrire ? 'Cube partagé : les corps, objets et rencontres sont communs à tous les visiteurs de cette page.' : 'Lecture seule : demande un accès Contributeur pour laisser une trace dans le Cube.') : 'Hors ligne : le Cube et ton Coffre sont enregistrés sur cet appareil seulement.';
   }
+  const EXPLICATIONS = {
+    pointes: { nom: 'Dalles à pointes', comment: 'Des groupes de dalles se hérissent de pointes d’acier, en vagues, en damier ou par rangées, à un rythme régulier.', signe: 'juste avant, les pointes affleurent à peine et un cliquetis se fait entendre.', conseil: 'observe le rythme depuis une dalle lisse, puis traverse juste après que ta rangée est redescendue.' },
+    lamesMur: { nom: 'Lames murales', comment: 'Des lames jaillissent à l’horizontale des fentes noires d’un mur, frappent puis se retirent.', signe: 'les fentes rougeoient pendant une seconde avant la frappe.', conseil: 'ne t’arrête jamais face à une fente ; passe juste après le retrait de la lame.' },
+    broyeur: { nom: 'Murs broyeurs', comment: 'Deux murs hérissés de pointes se referment l’un vers l’autre sur une bande de la salle, puis s’écartent.', signe: 'un grondement, les deux murs tremblent puis avancent ; des rails au sol marquent la bande.', conseil: 'quitte la bande dès le grondement, en sortant par les côtés : les murs te poussent vers le centre.' },
+    flammes: { nom: 'Jets de flammes', comment: 'Des buses de bronze dans les murs crachent un long jet de feu en ligne droite.', signe: 'un sifflement et une petite flamme au bout de la buse juste avant le jet.', conseil: 'repère la ligne de chaque buse et traverse entre deux jets.' },
+    fleches: { nom: 'Lanceurs de flèches', comment: 'Les petits trous d’un mur tirent des salves de flèches qui traversent toute la salle.', signe: 'un cliquetis de mécanisme juste avant la salve.', conseil: 'les flèches suivent la ligne de chaque trou : reste entre deux lignes, ou traverse juste après une salve.' },
+    dalle: { nom: 'Dalle de pression', comment: 'Une dalle légèrement surélevée déclenche une salve de flèches tirée depuis un mur, droit sur elle.', signe: 'la dalle est un peu plus sombre et plus haute que les autres ; elle s’enfonce avec un clic.', conseil: 'contourne les dalles en relief, ou quitte leur ligne immédiatement après avoir marché dessus.' },
+    fosses: { nom: 'Fosse dissimulée', comment: 'Une dalle identique aux autres cache un puits ; elle cède dès qu’on se tient dessus.', signe: 'une fine fente sombre longe le bord de la dalle piégée.', conseil: 'regarde les joints du sol avant de poser le pied ; une fosse où quelqu’un est tombé reste ouverte.' },
+    solDerobe: { nom: 'Sol qui se dérobe', comment: 'Une bande de dalles tombe dans le vide, une rangée après l’autre, d’un bout à l’autre, puis remonte.', signe: 'les dalles tremblent juste avant de tomber.', conseil: 'traverse en devançant l’effondrement, ou attends que toute la bande soit remontée.' },
+    pendule: { nom: 'Pendules tranchants', comment: 'De grandes lames suspendues au plafond balancent d’un mur à l’autre, au ras du sol au milieu de leur course.', signe: 'un souffle quand la lame passe au plus bas ; une rainure au sol marque sa trajectoire.', conseil: 'traverse la rainure juste après le passage de la lame.' },
+    herse: { nom: 'Herse tombante', comment: 'Une grille de fer tombe d’un coup dans l’embrasure de la porte et la bloque un moment.', signe: 'les chaînes cliquettent juste avant la chute.', conseil: 'ne reste jamais sous une porte quand les chaînes s’agitent. Un captif costaud (Force 50 ou plus) peut la soulever en maintenant A ou E.' },
+    plafond: { nom: 'Plafond descendant', comment: 'Un bloc de pierre descend du plafond jusqu’au sol sur une zone carrée, puis remonte.', signe: 'l’ombre au sol s’assombrit et un grondement se fait entendre.', conseil: 'quitte toute zone dont l’ombre s’assombrit.' },
+    rouleau: { nom: 'Rouleau à pointes', comment: 'Un cylindre hérissé roule d’un mur à l’autre le long d’une voie sombre.', signe: 'la bande sombre au sol est sa voie ; on l’entend rouler.', conseil: 'traverse la voie juste derrière lui.' },
+    engrenages: { nom: 'Roue dentée', comment: 'Une énorme roue de bronze roule le long d’un rail et broie ce qui se trouve sur son passage.', signe: 'le rail noir au sol et le grincement des dents.', conseil: 'franchis le rail quand la roue s’éloigne.' },
+    plateforme: { nom: 'Plateforme rotative', comment: 'Le grand disque central tourne ; une part du disque manque et laisse voir le vide.', signe: 'la zone noire qui tourne avec le disque.', conseil: 'reste sur le bronze en suivant la rotation, ou sors du disque.' },
+    scie: { nom: 'Lame circulaire', comment: 'Une scie circulaire parcourt une rainure du sol d’un bout à l’autre, en aller-retour.', signe: 'les fines rainures noires du sol sont ses rails.', conseil: 'franchis une rainure quand la scie est à l’autre bout.' },
+    statue: { nom: 'Statues cracheuses de feu', comment: 'Les statues de dragon tournent la tête et crachent un long jet de feu là où elles regardent.', signe: 'leurs yeux s’allument en rouge avant de cracher.', conseil: 'ne reste jamais dans le regard d’une statue aux yeux allumés.' },
+    coulissant: { nom: 'Murs coulissants', comment: 'Des pans de mur glissent d’un côté à l’autre de la salle et écrasent ce qu’ils coincent contre un mur.', signe: 'un frottement de pierre ; une rainure au sol marque leur trajet.', conseil: 'ne te laisse pas acculer contre un mur sur la trajectoire d’un pan mobile.' },
+    labyrinthe: { nom: 'Murs mobiles', comment: 'Des murs sortent du sol et y rentrent tour à tour, changeant les passages de la salle.', signe: 'un frottement juste avant que les murs bougent.', conseil: 'ne reste pas collé à un mur bas : il peut te coincer en remontant.' },
+    lumiere: { nom: 'Faisceaux de feu', comment: 'Des bandes de lumière balaient le sol ; au signal, une colonne de feu tombe sur chacune d’elles.', signe: 'la lumière devient soudain plus vive.', conseil: 'sors de la bande dès qu’elle s’intensifie.' },
+    silence: { nom: 'Salle du silence', comment: 'Le bruit réveille la salle : courir, ramasser un objet ou frapper le gong fait jaillir des pointes autour de l’endroit où tu étais.', signe: 'les cloches suspendues tintent.', conseil: 'marche sans courir (pas de Maj ni de B) ; si les cloches sonnent, éloigne-toi tout de suite.' },
+    temps: { nom: 'Portes temporisées', comment: 'Les portes ne s’ouvrent qu’une partie du temps et claquent violemment en se refermant.', signe: 'la colonne d’eau se vide : quand elle est vide, les portes claquent.', conseil: 'franchis la porte pendant que la colonne est encore pleine.' },
+    trompeur: { nom: 'Fausse porte', comment: 'Une porte peinte sur le mur ; la toucher déclenche une lame cachée dans l’encadrement.', signe: 'elle n’a pas de plaque de bronze à côté.', conseil: 'une vraie porte a toujours sa plaque : ne touche pas les autres.' },
+    escalier: { nom: 'Échelle effondrable', comment: 'L’échelle qui mène au plafond cède régulièrement sous le poids.', signe: 'elle tremble et grince avant de céder.', conseil: 'ne monte que quand elle est parfaitement immobile.' },
+    condamnee: { nom: 'Chambre condamnée', comment: 'Les portes se scellent et tout le plafond descend, sauf au-dessus du lotus peint dans un coin.', signe: 'les portes claquent et le plafond gronde.', conseil: 'cours te mettre sur le lotus, ou fuis par la trappe du sol.' },
+    instable: { nom: 'Sol instable', comment: 'De grandes dalles montent, redescendent, puis s’enfoncent dans le vide.', signe: 'elles tremblent avant de s’enfoncer.', conseil: 'quitte une grande dalle dès qu’elle tremble.' },
+    salve: { nom: 'Salve du boulier', comment: 'Une mauvaise réponse au boulier déclenche une salve de flèches tirée du mur du fond, droit sur le boulier.', signe: 'le levier claque et un mécanisme s’arme dans le mur.', conseil: 'après avoir tiré le levier, écarte-toi aussitôt de l’axe du boulier.' },
+  };
   const causeTexte = c => ({ pointes: 'transpercé', lames: 'tranché', tranche: 'tranché', ecrase: 'écrasé', brule: 'brûlé', fleches: 'flèches', chute: 'chute', scie: 'lame circulaire', broye: 'broyé', epuisement: 'épuisement' }[c] || c);
   function rendreCoffre(cont) {
     cont.innerHTML = '';
@@ -1651,6 +1768,7 @@
     $('#btn-son').addEventListener('click', () => { D.reglages.son = !D.reglages.son; A.init(); A.volume(D.reglages.son); $('#btn-son').textContent = D.reglages.son ? 'Son : oui' : 'Son : non'; sauverReglages(); });
     $('#btn-chat').addEventListener('click', () => { D.reglages.chatMasque = !D.reglages.chatMasque; sauverReglages(); rendreChat(); });
     $('#abaque-valider').addEventListener('click', validerAbaque);
+    $('#verrou-form').addEventListener('submit', e => { e.preventDefault(); essayerVerrou(); });
     document.querySelectorAll('#abaque-roues .roue-ab').forEach((r, i) => {
       r.querySelector('.plus').addEventListener('click', () => { J.abaque[i] = (J.abaque[i] + 1) % 10; rendreAbaque(); A.jouer('cliquetis', 0.3); });
       r.querySelector('.moins').addEventListener('click', () => { J.abaque[i] = (J.abaque[i] + 9) % 10; rendreAbaque(); A.jouer('cliquetis', 0.3); });
