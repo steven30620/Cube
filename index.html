@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cube</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@500;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* Laque noire, or terni, cinabre : un seul monde visuel, sombre par choix.
+     Mise en page : un pavillon à deux colonnes (captifs | Coffre), le jeu en plein écran par-dessus. */
+  :root {
+    --laque: #0b0a09;
+    --laque-2: #15120f;
+    --or: #c9a24a;
+    --or-pale: #e8d7a8;
+    --cinabre: #a3271f;
+    --jade: #4f9a7a;
+    --cendre: #8c8476;
+    --f-titre: "Shippori Mincho B1", "Noto Serif JP", "Songti SC", Georgia, serif;
+    --f-texte: "Zen Kaku Gothic New", "Hiragino Sans", "Segoe UI", system-ui, sans-serif;
+    --deso: 0;
+    --k: 0;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--laque); color: var(--or-pale); font-family: var(--f-texte); font-size: 15px; line-height: 1.5; overflow: hidden; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--or); outline-offset: 2px; }
+  h1, h2, h3, h4 { font-family: var(--f-titre); font-weight: 700; text-wrap: balance; margin: 0; }
+
+  .btn { display: inline-flex; align-items: center; gap: .4em; padding: .45em .95em; border: 1px solid rgba(201,162,74,.45); background: rgba(21,18,15,.85); color: var(--or-pale); border-radius: 2px; cursor: pointer; letter-spacing: .02em; transition: background .15s, border-color .15s; }
+  .btn:hover { border-color: var(--or); background: rgba(201,162,74,.12); }
+  .btn.or { background: linear-gradient(#3a2c12, #241a0b); border-color: var(--or); color: #f3e3b6; }
+  .btn.or:hover { background: linear-gradient(#4a3916, #2e220e); }
+  .mini { font-size: .72rem; padding: .05em .45em; margin-left: .35em; border: 1px solid rgba(201,162,74,.35); background: transparent; color: var(--cendre); cursor: pointer; border-radius: 2px; }
+  .mini:hover { color: var(--or-pale); }
+
+  /* ---------- scène 3D ---------- */
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  body[data-ecran="menu"] #scene { visibility: hidden; }
+  body[data-cinematique="mort"] #scene { filter: grayscale(calc(var(--k) * 1.4)) brightness(calc(1 - var(--k) * .45)) contrast(1.1); }
+  body[data-cinematique="liberte"] #scene { filter: brightness(calc(1 + var(--k) * .5)) saturate(calc(1 - var(--k) * .4)); }
+  #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,calc(.55 + var(--deso) * .35)) 100%); }
+  body[data-ecran="menu"] #vignette { display: none; }
+
+  /* ---------- pavillon (menu) ---------- */
+  #menu { position: fixed; inset: 0; overflow-y: auto; padding: clamp(16px, 4vw, 48px); background:
+      radial-gradient(ellipse 80% 60% at 70% 0%, rgba(163,39,31,.16), transparent 70%),
+      repeating-linear-gradient(90deg, rgba(201,162,74,.045) 0 1px, transparent 1px 72px),
+      repeating-linear-gradient(0deg, rgba(201,162,74,.045) 0 1px, transparent 1px 72px), var(--laque); }
+  body[data-ecran="jeu"] #menu { display: none; }
+  .entete { display: grid; grid-template-columns: auto 1fr; gap: clamp(16px, 3vw, 36px); align-items: end; max-width: 1180px; margin: 0 auto 28px; }
+  .sceau-titre { width: clamp(62px, 7.5vw, 92px); padding: .28em 0; background: var(--cinabre); color: #f6e7c8; display: flex; flex-direction: column; align-items: center; font-family: var(--f-titre); font-weight: 800; font-size: clamp(28px, 3.4vw, 42px); line-height: 1.08; align-self: center; box-shadow: inset 0 0 0 4px #7a1410, inset 0 0 0 6px rgba(246,231,200,.5); transform: rotate(-3deg); }
+  .entete h1 { font-size: clamp(30px, 5.4vw, 64px); font-weight: 800; line-height: 1.02; letter-spacing: -.01em; color: #f1e2b9; }
+  .entete h1 span { display: block; font-size: .42em; font-weight: 500; letter-spacing: .32em; color: var(--or); text-transform: uppercase; margin-bottom: .45em; }
+  .entete p { margin: .7em 0 0; color: var(--cendre); max-width: 62ch; }
+  .colonnes { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 24px; max-width: 1180px; margin: 0 auto; }
+  @media (max-width: 860px) { .colonnes { grid-template-columns: 1fr; } }
+  .cadre { border: 1px solid rgba(201,162,74,.28); background: linear-gradient(rgba(21,18,15,.92), rgba(11,10,9,.92)); padding: 20px; position: relative; }
+  .cadre::before { content: ""; position: absolute; inset: 5px; border: 1px solid rgba(201,162,74,.12); pointer-events: none; }
+  .cadre h2 { font-size: 1.35rem; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .cadre h2 small { font-family: var(--f-texte); font-size: .78rem; color: var(--cendre); font-weight: 400; }
+  #liste-persos { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  .perso { display: grid; grid-template-columns: 84px 1fr; gap: 16px; padding: 14px; border: 1px solid rgba(201,162,74,.18); background: rgba(0,0,0,.25); }
+  .perso.statut-mort { opacity: .62; }
+  .perso .portrait { width: 84px; height: 96px; background: radial-gradient(circle at 50% 40%, #2a2014, #0d0b08); border: 1px solid rgba(201,162,74,.3); }
+  .perso h3 { font-size: 1.3rem; display: inline; margin-right: 10px; }
+  .puce { display: inline-block; font-size: .72rem; padding: .1em .6em; border: 1px solid currentColor; letter-spacing: .06em; text-transform: uppercase; vertical-align: .25em; }
+  .puce.captif { color: var(--or); } .puce.cube { color: #e0a060; } .puce.mort { color: #c46a5f; } .puce.evade { color: #8fd3b0; }
+  .stats { display: grid; grid-template-columns: max-content 1fr; gap: 3px 10px; margin: 10px 0 8px; font-size: .82rem; }
+  .stats dt { color: var(--cendre); }
+  .stats dd { margin: 0; display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+  .stats dd i { display: block; height: 5px; background: linear-gradient(90deg, #6b5320, var(--or)); max-width: 160px; flex: 0 0 auto; }
+  .equip { margin: 0 0 10px; font-size: .82rem; color: var(--cendre); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .histo { list-style: none; margin: 10px 0 0; padding: 8px 0 0; border-top: 1px dashed rgba(201,162,74,.2); font-size: .8rem; color: var(--cendre); }
+  details.recrue { margin-top: 16px; border-top: 1px solid rgba(201,162,74,.2); padding-top: 12px; }
+  details.recrue summary { cursor: pointer; font-family: var(--f-titre); font-size: 1.05rem; color: var(--or); }
+  #form-recrue { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 16px; margin-top: 12px; font-size: .85rem; }
+  #form-recrue label { display: grid; gap: 4px; color: var(--cendre); }
+  #form-recrue input[type=text], #form-recrue select { background: #0d0b08; border: 1px solid rgba(201,162,74,.35); padding: .35em .5em; }
+  #form-recrue input[type=color] { width: 100%; height: 30px; background: none; border: 1px solid rgba(201,162,74,.35); padding: 0; }
+  #form-recrue input[type=range] { accent-color: var(--or); }
+  #form-recrue .pied { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #recrue-reste { color: var(--or); font-variant-numeric: tabular-nums; }
+  .monnaies { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .monnaie { border: 1px solid rgba(201,162,74,.25); padding: 8px 10px; background: rgba(0,0,0,.3); }
+  .monnaie strong { display: block; font-family: var(--f-titre); font-size: 1.45rem; font-variant-numeric: tabular-nums; color: #f1e2b9; line-height: 1.1; }
+  .monnaie span { font-size: .72rem; color: var(--cendre); letter-spacing: .04em; }
+  .monnaie.orNoir strong { color: #b8a6d9; } .monnaie.jetons strong { color: #e07a6a; }
+  .coffre h4 { font-size: .95rem; color: var(--or); margin: 12px 0 6px; font-weight: 500; }
+  .objets, .journal { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: .86rem; }
+  .objets li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px; background: rgba(0,0,0,.25); border-left: 3px solid #cfc6b0; }
+  .objets li b { font-variant-numeric: tabular-nums; color: var(--cendre); font-weight: 500; }
+  .rarete-rare { border-left-color: #6fb7ff !important; } .rarete-epique { border-left-color: #c77dff !important; } .rarete-legendaire { border-left-color: #ffc94a !important; color: #ffe3a0; }
+  .journal li { color: var(--cendre); }
+  .vide { color: var(--cendre); font-size: .88rem; margin: 6px 0; }
+  .note-reseau { margin-top: 14px; font-size: .78rem; color: var(--cendre); border-top: 1px solid rgba(201,162,74,.15); padding-top: 10px; }
+
+  /* ---------- notification d'évasion ---------- */
+  #notif { position: fixed; right: 20px; bottom: 20px; width: min(320px, calc(100vw - 32px)); background: #050505; border: 1px solid var(--or); box-shadow: 0 0 0 1px #000, 0 0 0 4px rgba(201,162,74,.18), 0 18px 40px rgba(0,0,0,.6); padding: 16px 18px 16px 74px; z-index: 40; transform: translateY(14px); opacity: 0; transition: transform .5s cubic-bezier(.2,.9,.2,1), opacity .5s; }
+  #notif.visible { transform: none; opacity: 1; animation: lueur 3.2s ease-in-out 1s infinite; }
+  @keyframes lueur { 50% { box-shadow: 0 0 0 1px #000, 0 0 0 4px rgba(201,162,74,.34), 0 0 28px rgba(201,162,74,.18), 0 18px 40px rgba(0,0,0,.6); } }
+  #notif svg { position: absolute; left: 18px; top: 18px; width: 40px; height: 52px; }
+  #notif h2 { font-size: 1.1rem; letter-spacing: .38em; color: var(--or); font-weight: 800; }
+  #notif p { margin: 4px 0 12px; color: var(--or-pale); }
+  #notif .btn { letter-spacing: .3em; font-weight: 700; padding: .5em 1.4em; }
+
+  /* ---------- HUD du jeu ---------- */
+  .hud { position: fixed; z-index: 10; }
+  body[data-ecran="menu"] .hud, body[data-cinematique] .hud { display: none !important; }
+  #hud-haut { top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; pointer-events: none; }
+  #hud-haut > * { pointer-events: auto; }
+  .identite { display: flex; align-items: center; gap: 10px; background: rgba(5,5,5,.7); border: 1px solid rgba(201,162,74,.3); padding: 6px 14px 6px 6px; }
+  .identite canvas { width: 38px; height: 44px; }
+  .identite b { font-family: var(--f-titre); font-size: 1.1rem; }
+  .barre { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .barre .btn { font-size: .82rem; padding: .35em .7em; }
+  .barre kbd, .touches kbd { font-family: var(--f-texte); font-size: .7rem; border: 1px solid rgba(201,162,74,.4); padding: 0 .35em; border-radius: 2px; color: var(--or); }
+  #invite { left: 50%; bottom: 92px; transform: translateX(-50%); background: rgba(5,5,5,.82); border: 1px solid rgba(201,162,74,.45); padding: 6px 16px; font-size: .92rem; white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; }
+  #invite kbd { border: 1px solid var(--or); color: var(--or); padding: 0 .4em; margin-right: .5em; font-family: var(--f-texte); }
+  #message { left: 50%; top: 22%; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); text-align: center; font-family: var(--f-titre); font-size: 1.15rem; color: #f1e2b9; text-shadow: 0 2px 10px #000, 0 0 2px #000; opacity: 0; transition: opacity .6s; pointer-events: none; }
+  #message.visible { opacity: 1; }
+  #chat { right: 12px; bottom: 12px; width: min(330px, calc(100vw - 24px)); background: rgba(5,5,5,.66); border: 1px solid rgba(201,162,74,.22); font-size: .85rem; }
+  #chat.masque #chat-liste, #chat.masque #chat-saisie { display: none; }
+  #chat-entete { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; color: var(--cendre); font-size: .75rem; border-bottom: 1px solid rgba(201,162,74,.15); }
+  #chat-liste { list-style: none; margin: 0; padding: 6px 8px; max-height: 150px; overflow-y: auto; display: grid; gap: 3px; }
+  #chat-liste b { color: var(--or); }
+  #chat-saisie { width: 100%; background: #0d0b08; border: 0; border-top: 1px solid rgba(201,162,74,.2); padding: 6px 8px; }
+
+  /* ---------- panneaux ---------- */
+  .panneau { position: fixed; z-index: 30; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(720px, calc(100vw - 24px)); max-height: calc(100vh - 40px); overflow-y: auto; background: linear-gradient(#17130e, #0b0a09); border: 1px solid var(--or); box-shadow: 0 0 0 5px rgba(0,0,0,.8), 0 0 0 6px rgba(201,162,74,.3), 0 30px 80px #000; padding: 22px 24px; }
+  .panneau h3 { font-size: 1.3rem; margin-bottom: 12px; color: #f1e2b9; }
+  .panneau .fermer { position: absolute; right: 10px; top: 10px; }
+  .plaque-grille { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 640px) { .plaque-grille { grid-template-columns: 1fr; } }
+  #sceau { width: 100%; max-width: 220px; aspect-ratio: 32 / 23; display: block; }
+  .legende { font-size: .75rem; letter-spacing: .2em; text-transform: uppercase; color: var(--cendre); margin: 0 0 6px; }
+  #cadran { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 2px; background: #050505; border: 1px solid #5a4a2a; padding: 12px; font-family: var(--f-titre); font-size: clamp(1.2rem, 2.6vw, 1.7rem); font-variant-numeric: tabular-nums; color: #f1e2b9; }
+  #cadran .groupe { display: inline-flex; background: linear-gradient(#211a10, #0d0a06 50%, #211a10); border: 1px solid #3a2f1c; padding: 0 3px; }
+  #cadran .roue { display: inline-block; height: 1.15em; line-height: 1.15em; overflow: hidden; width: .72em; text-align: center; }
+  #cadran .bande { display: block; width: 1ch; margin: 0 auto; word-break: break-all; line-height: 1.15em; transition: transform .8s cubic-bezier(.3,1.35,.45,1); }
+  #cadran .bande { transform-origin: top; }
+  #cadran .tiret { color: var(--cendre); padding: 0 1px; }
+  #plaque-etat { margin: 14px 0 4px; font-family: var(--f-titre); font-size: 1.05rem; }
+  #plaque-obs { margin: 0; color: var(--cendre); font-size: .85rem; }
+  #panneau-texte-corps { max-width: 62ch; margin: 0; font-size: 1rem; }
+  #carnet-liste { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 8px; max-height: 46vh; overflow-y: auto; }
+  .entree { border-left: 2px solid rgba(201,162,74,.35); padding: 4px 10px; background: rgba(0,0,0,.25); }
+  .entree.plaque { border-left-color: var(--or); } .entree.corps { border-left-color: #c46a5f; }
+  .entree .meta { font-size: .72rem; color: var(--cendre); }
+  .entree .corps { font-family: var(--f-titre); font-variant-numeric: tabular-nums; font-size: 1rem; white-space: pre-wrap; }
+  #carnet-notes { width: 100%; min-height: 110px; background: #0d0b08; border: 1px solid rgba(201,162,74,.3); padding: 8px; resize: vertical; }
+  #abaque-tablette { width: 100%; max-width: 480px; display: block; margin: 0 auto 14px; }
+  #abaque-roues { display: flex; justify-content: center; gap: 18px; margin-bottom: 14px; }
+  .roue-ab { display: grid; gap: 6px; justify-items: center; }
+  .roue-ab canvas { width: 80px; height: 90px; border: 1px solid #5a4a2a; }
+  .touches { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; }
+  .touches dd { margin: 0; color: var(--cendre); }
+
+  /* ---------- chargement, fondu, dialogue ---------- */
+  #chargement { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(5,5,5,.94); text-align: center; }
+  .cube-attente { width: 64px; height: 64px; margin: 0 auto 18px; border: 2px solid var(--or); animation: tourne 3s cubic-bezier(.6,0,.4,1) infinite; box-shadow: inset 0 0 0 10px var(--laque), inset 0 0 0 11px rgba(201,162,74,.5); }
+  @keyframes tourne { 0% { transform: rotate(0); } 25% { transform: rotate(90deg); } 50% { transform: rotate(90deg) translateY(-6px); } 75% { transform: rotate(180deg); } 100% { transform: rotate(180deg); } }
+  #chargement-txt { font-family: var(--f-titre); font-size: 1.15rem; }
+  #fondu { position: fixed; inset: 0; z-index: 25; background: #000; opacity: 0; pointer-events: none; transition: opacity .45s; }
+  #fondu.actif { opacity: 1; } #fondu.clair { background: #e8f4ec; }
+  #dialogue { position: fixed; inset: 0; z-index: 45; display: grid; place-items: center; background: rgba(0,0,0,.6); padding: 16px; }
+  #dialogue .panneau { position: static; transform: none; }
+
+  /* ---------- cinématiques (10 s) ---------- */
+  #cinematique { position: fixed; inset: 0; z-index: 35; pointer-events: none; display: grid; place-items: center; text-align: center; padding: 24px; }
+  body[data-cinematique="mort"] #cinematique { background: radial-gradient(ellipse at center, transparent 30%, rgba(90,8,4,calc(var(--k) * .6)) 100%); }
+  body[data-cinematique="liberte"] #cinematique { background: radial-gradient(circle at 50% 45%, rgba(255,248,230,calc(var(--k) * .55)), transparent 70%); }
+  #cin-titre { font-family: var(--f-titre); font-size: clamp(48px, 11vw, 140px); font-weight: 800; letter-spacing: .4em; color: #fff8e6; opacity: 0; text-shadow: 0 0 40px rgba(255,240,200,.6); }
+  #cinematique p { margin: .4em auto; max-width: 52ch; font-family: var(--f-titre); font-size: clamp(1rem, 2.2vw, 1.35rem); color: #f1e2b9; text-shadow: 0 2px 12px #000; opacity: 0; }
+  #cinematique:not([hidden]) #cin-titre { animation: apparait 1.6s ease 3.2s forwards, ecarte 6s ease 3.2s forwards; }
+  #cinematique:not([hidden]) #cin-l1 { animation: apparait 1.2s ease 1.4s forwards; }
+  #cinematique:not([hidden]) #cin-l2 { animation: apparait 1.2s ease 3.6s forwards; }
+  #cinematique:not([hidden]) #cin-l3 { animation: apparait 1.2s ease 6s forwards; }
+  @keyframes apparait { to { opacity: 1; } }
+  @keyframes ecarte { from { letter-spacing: .1em; } to { letter-spacing: .5em; } }
+
+  /* ---------- tactile ---------- */
+  #pad, #tact-e, #tact-f { display: none; }
+  body.tactile[data-ecran="jeu"] #pad { display: block; position: fixed; left: 24px; bottom: 24px; width: 120px; height: 120px; border-radius: 50%; border: 1px solid rgba(201,162,74,.4); background: rgba(0,0,0,.35); z-index: 12; touch-action: none; }
+  #pad-bouton { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(201,162,74,.35); }
+  body.tactile[data-ecran="jeu"] #tact-e, body.tactile[data-ecran="jeu"] #tact-f { display: block; position: fixed; z-index: 12; width: 64px; height: 64px; border-radius: 50%; }
+  body.tactile #tact-e { right: 24px; bottom: 200px; } body.tactile #tact-f { right: 100px; bottom: 170px; }
+  body.tactile #chat { width: 220px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    #cinematique:not([hidden]) #cin-titre, #cinematique:not([hidden]) p { animation-delay: 0s !important; }
+  }
+</style>
+</head>
+<body data-ecran="menu">
+<canvas id="scene" aria-label="Vue du Cube"></canvas>
+<div id="vignette"></div>
+
+<!-- ===================== PAVILLON DES CAPTIFS ===================== -->
+<main id="menu">
+  <header class="entete">
+    <div class="sceau-titre" aria-hidden="true"><span>千</span><span>刑</span></div>
+    <div>
+      <h1><span>Pavillon des captifs</span>Le Cube des Mille Supplices</h1>
+      <p>Chaque captif qui tente de s’évader entre seul dans la première salle. Ce qu’il ramasse rejoint aussitôt ton Coffre, quoi qu’il lui arrive ensuite.</p>
+    </div>
+  </header>
+  <div class="colonnes">
+    <section class="cadre" aria-labelledby="titre-captifs">
+      <h2 id="titre-captifs">Les captifs <small>Points de caractéristiques : 250 par captif</small></h2>
+      <ul id="liste-persos"></ul>
+      <details class="recrue">
+        <summary>Faire entrer un nouveau captif</summary>
+        <form id="form-recrue">
+          <label for="recrue-nom">Nom<input type="text" id="recrue-nom" maxlength="24" placeholder="Mei, Ren, Hoshi…"></label>
+          <label for="recrue-coiffe">Coiffe
+            <select id="recrue-coiffe"><option value="kasa">Chapeau de paille</option><option value="chignon">Chignon</option><option value="casque">Casque</option><option value="bandeau">Bandeau</option><option value="voile">Voile</option><option value="nu">Tête nue</option></select>
+          </label>
+          <label for="recrue-peau">Teint
+            <select id="recrue-peau"><option value="jaune">Brique jaune</option><option value="clair">Clair</option><option value="mat">Mat</option><option value="brun">Brun</option></select>
+          </label>
+          <label for="recrue-tunique">Tunique<input type="color" id="recrue-tunique" value="#a3271f"></label>
+          <label for="recrue-pantalon">Pantalon<input type="color" id="recrue-pantalon" value="#1a1a1e"></label>
+          <label for="recrue-force">Force <span id="recrue-force-v">50</span><input type="range" id="recrue-force" min="10" max="90" value="50"></label>
+          <label for="recrue-agilite">Agilité <span id="recrue-agilite-v">50</span><input type="range" id="recrue-agilite" min="10" max="90" value="50"></label>
+          <label for="recrue-intelligence">Intelligence <span id="recrue-intelligence-v">50</span><input type="range" id="recrue-intelligence" min="10" max="90" value="50"></label>
+          <label for="recrue-discipline">Discipline <span id="recrue-discipline-v">50</span><input type="range" id="recrue-discipline" min="10" max="90" value="50"></label>
+          <label for="recrue-sangFroid">Sang-froid <span id="recrue-sangFroid-v">50</span><input type="range" id="recrue-sangFroid" min="10" max="90" value="50"></label>
+          <div class="pied"><button type="submit" class="btn or">Enregistrer le captif</button><button type="button" class="btn" id="btn-hasard">Tirer au hasard</button><span id="recrue-reste">Points restants : 0</span></div>
+        </form>
+      </details>
+    </section>
+    <aside class="cadre coffre" aria-labelledby="titre-coffre">
+      <h2 id="titre-coffre">Ton Coffre <button type="button" class="mini" id="btn-copier-coffre">Copier le Coffre (JSON)</button></h2>
+      <div id="coffre-menu"></div>
+      <p class="note-reseau" id="mode-reseau">Connexion au Cube…</p>
+    </aside>
+  </div>
+</main>
+
+<!-- ===================== NOTIFICATION ===================== -->
+<div id="notif" role="status" hidden>
+  <svg viewBox="0 0 40 52" aria-hidden="true"><rect x="2" y="2" width="36" height="48" fill="none" stroke="#c9a24a" stroke-width="2"/><rect x="8" y="8" width="11" height="38" fill="#1a1410" stroke="#c9a24a" stroke-width="1"/><rect x="21" y="8" width="11" height="38" fill="#1a1410" stroke="#c9a24a" stroke-width="1"/><circle cx="17" cy="28" r="1.4" fill="#c9a24a"/><circle cx="23" cy="28" r="1.4" fill="#c9a24a"/><line x1="20" y1="8" x2="20" y2="46" stroke="#e8d7a8" stroke-width=".6" opacity=".6"/></svg>
+  <h2>ÉVASION</h2>
+  <p>La salle est disponible.</p>
+  <button type="button" class="btn or" id="notif-entrer">ENTRER</button>
+</div>
+
+<!-- ===================== HUD ===================== -->
+<div class="hud" id="hud-haut">
+  <div class="identite"><canvas id="hud-portrait" width="76" height="88"></canvas><b id="hud-nom"></b></div>
+  <div class="barre">
+    <button type="button" class="btn" id="btn-carnet">Carnet <kbd>N</kbd></button>
+    <button type="button" class="btn" id="btn-coffre">Coffre <kbd>I</kbd></button>
+    <button type="button" class="btn" id="btn-aide">Commandes <kbd>H</kbd></button>
+    <button type="button" class="btn" id="btn-son">Son : oui</button>
+    <button type="button" class="btn" id="btn-quitter">Quitter</button>
+  </div>
+</div>
+<div class="hud" id="invite" hidden><kbd>E</kbd><span id="invite-txt"></span></div>
+<div class="hud" id="message" aria-live="polite"></div>
+<div class="hud" id="chat">
+  <div id="chat-entete"><span>Voix dans la salle</span><button type="button" class="mini" id="btn-chat">Masquer / afficher</button></div>
+  <ul id="chat-liste"></ul>
+  <input type="text" id="chat-saisie" maxlength="200" placeholder="Entrée pour parler aux présents" aria-label="Message aux personnes de la salle">
+</div>
+<div id="pad" class="hud"><div id="pad-bouton"></div></div>
+<button type="button" class="btn or hud" id="tact-e">E</button>
+<button type="button" class="btn hud" id="tact-f">F</button>
+
+<!-- ===================== PANNEAUX ===================== -->
+<section class="panneau" id="panneau-plaque" hidden aria-label="Plaque de la porte">
+  <button type="button" class="mini fermer" data-fermer>Fermer</button>
+  <h3>Plaque de bronze</h3>
+  <div class="plaque-grille">
+    <div><p class="legende">Sceau gravé</p><canvas id="sceau" width="320" height="230"></canvas></div>
+    <div><p class="legende">Cadran</p><div id="cadran"></div><p id="plaque-etat"></p><p id="plaque-obs"></p></div>
+  </div>
+</section>
+<section class="panneau" id="panneau-texte" hidden aria-labelledby="panneau-texte-titre">
+  <button type="button" class="mini fermer" data-fermer>Fermer</button>
+  <h3 id="panneau-texte-titre"></h3>
+  <p id="panneau-texte-corps"></p>
+</section>
+<section class="panneau" id="panneau-abaque" hidden aria-label="Boulier de bronze">
+  <button type="button" class="mini fermer" data-fermer>Fermer</button>
+  <h3>Le boulier</h3>
+  <canvas id="abaque-tablette" width="480" height="140"></canvas>
+  <div id="abaque-roues">
+    <div class="roue-ab"><button type="button" class="mini plus" aria-label="Tourner la première roue vers le haut">▲</button><button type="button" class="mini moins" aria-label="Tourner la première roue vers le bas">▼</button></div>
+    <div class="roue-ab"><button type="button" class="mini plus" aria-label="Tourner la deuxième roue vers le haut">▲</button><button type="button" class="mini moins" aria-label="Tourner la deuxième roue vers le bas">▼</button></div>
+    <div class="roue-ab"><button type="button" class="mini plus" aria-label="Tourner la troisième roue vers le haut">▲</button><button type="button" class="mini moins" aria-label="Tourner la troisième roue vers le bas">▼</button></div>
+  </div>
+  <button type="button" class="btn or" id="abaque-valider">Tirer le levier</button>
+</section>
+<section class="panneau" id="panneau-carnet" hidden aria-label="Carnet">
+  <button type="button" class="mini fermer" data-fermer>Fermer</button>
+  <h3>Carnet</h3>
+  <ul id="carnet-liste"></ul>
+  <label for="carnet-notes" class="legende">Tes notes</label>
+  <textarea id="carnet-notes" placeholder="Ce que tu crois avoir compris…"></textarea>
+</section>
+<section class="panneau" id="panneau-coffre" hidden aria-label="Coffre">
+  <button type="button" class="mini fermer" data-fermer>Fermer</button>
+  <h3>Ton Coffre</h3>
+  <div id="coffre-jeu" class="coffre"></div>
+</section>
+<section class="panneau" id="panneau-aide" hidden aria-label="Commandes">
+  <button type="button" class="mini fermer" data-fermer>Fermer</button>
+  <h3>Commandes</h3>
+  <dl class="touches">
+    <dt><kbd>Z</kbd> <kbd>Q</kbd> <kbd>S</kbd> <kbd>D</kbd> · flèches</dt><dd>Se déplacer</dd>
+    <dt><kbd>Maj</kbd></dt><dd>Courir</dd>
+    <dt><kbd>E</kbd></dt><dd>Interagir, examiner, ramasser, monter</dd>
+    <dt><kbd>F</kbd></dt><dd>Descendre par la trappe</dd>
+    <dt>Clic</dt><dd>Examiner ce qui est à portée</dd>
+    <dt>Molette</dt><dd>Rapprocher ou éloigner la vue</dd>
+    <dt><kbd>N</kbd> · <kbd>Tab</kbd></dt><dd>Carnet</dd>
+    <dt><kbd>I</kbd></dt><dd>Coffre</dd>
+    <dt><kbd>Entrée</kbd></dt><dd>Parler aux personnes présentes dans la salle</dd>
+    <dt><kbd>Échap</kbd></dt><dd>Fermer un panneau</dd>
+  </dl>
+</section>
+
+<div id="fondu"></div>
+<div id="cinematique" hidden><div><div id="cin-titre"></div><p id="cin-l1"></p><p id="cin-l2"></p><p id="cin-l3"></p></div></div>
+<div id="chargement" hidden><div><div class="cube-attente" aria-hidden="true"></div><p id="chargement-txt"></p></div></div>
+<div id="dialogue" hidden><section class="panneau" aria-labelledby="dialogue-titre"><h3 id="dialogue-titre"></h3><p id="dialogue-corps"></p><button type="button" class="btn or" id="dialogue-ok">Fermer</button></section></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="moteur.js"></script>
+<script src="rendu.js"></script>
+<script src="jeu.js"></script>
+<script>
+  if (!window.THREE) { document.getElementById('mode-reseau').textContent = 'Le moteur 3D n’a pas pu être chargé. Recharge la page.'; }
+</script>
+</body>
+</html>
