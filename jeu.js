@@ -357,15 +357,30 @@
     if (renderer) return;
     const cv = $('#scene');
     renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
-    renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
-    scene = new THREE.Scene(); scene.background = new THREE.Color(0x040405); scene.fog = new THREE.FogExp2(0x040405, 0.024);
+    renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.4;
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.physicallyCorrectLights = false;
+    scene = new THREE.Scene(); scene.background = new THREE.Color(0x050403); scene.fog = new THREE.FogExp2(0x060403, 0.022);
+    R.preparerEnvironnement(renderer, scene);
     camera = new THREE.PerspectiveCamera(46, 1, 0.5, 600);
-    hemi = new THREE.HemisphereLight(0x9a8a70, 0x0a0806, 0.42); scene.add(hemi);
+    hemi = new THREE.HemisphereLight(0x9a8a70, 0x0a0806, 0.2); scene.add(hemi);
+    appliquerQualite();
     lumJoueur = new THREE.PointLight(0xffd9a0, 0.55, 8, 2); scene.add(lumJoueur);
     lumSortie = new THREE.PointLight(0xffffff, 0, 40, 1.5); scene.add(lumSortie);
     J.structure = R.construireStructure(); scene.add(J.structure.groupe);
     redimensionner(); window.addEventListener('resize', redimensionner);
+  }
+  function qualite() {
+    const q = D.reglages && D.reglages.qualite;
+    if (q === 'haute' || q === 'normale' || q === 'basse') return q;
+    const modeste = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || window.innerWidth < 900;
+    return modeste ? 'normale' : 'haute';
+  }
+  function appliquerQualite() {
+    const q = qualite();
+    R.regler(q);
+    if (renderer) { renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q === 'haute' ? 1.75 : q === 'normale' ? 1.25 : 1)); redimensionner(); }
+    const b = document.getElementById('btn-qualite'); if (b) b.textContent = 'Qualité : ' + q;
   }
   function redimensionner() {
     if (!renderer) return;
@@ -446,6 +461,9 @@
       if (J.panneau !== 'carnet') $('#carnet-notes').value = J.carnet.notes;
     });
     journal('première salle prête', t0);
+    // les textures des autres salles se préparent en tâche de fond, une à une
+    clearInterval(J.minuteurPrechauffe);
+    J.minuteurPrechauffe = setInterval(() => { if (J.mode !== 'jeu' || !R.prechauffer()) { if (J.mode !== 'jeu') return; clearInterval(J.minuteurPrechauffe); } }, 900);
     noterSalle();
     J.mode = 'jeu';
     document.body.dataset.ecran = 'jeu';
@@ -465,7 +483,15 @@
     scene.add(J.salle.groupe);
     // lumières de salle
     const sp = J.salle.spec;
-    J.salle.lumieres = J.salle.lanternes.map(lg => { const l = new THREE.PointLight(sp.lanterne, 1.15, 17, 2); lg.add(l); return l; });
+    J.salle.lumieres = J.salle.lanternes.map(lg => { const l = new THREE.PointLight(sp.lanterne, 0.95, 16, 2); lg.add(l); return l; });
+    const spot = new THREE.SpotLight(0xffe4c4, 1.7, 36, 0.92, 0.6, 1.3);
+    spot.position.set(1.2, CF.HAUT + 7, 2.2); spot.target.position.set(0, 0, 0);
+    J.salle.groupe.add(spot); J.salle.groupe.add(spot.target);
+    const q = qualite();
+    spot.castShadow = q !== 'basse';
+    spot.shadow.mapSize.set(q === 'haute' ? 2048 : 1024, q === 'haute' ? 2048 : 1024);
+    spot.shadow.camera.near = 3; spot.shadow.camera.far = 30; spot.shadow.bias = -0.0004; spot.shadow.normalBias = 0.025; spot.shadow.radius = 4;
+    J.salle.spot = spot;
     // joueur
     if (!J.figJoueur || premiere) {
       if (J.figJoueur && J.figJoueur.racine.parent) J.figJoueur.racine.parent.remove(J.figJoueur.racine);
@@ -580,7 +606,8 @@
     // --- lumière
     const obscur = s.traits.obscur;
     s.lumieres.forEach((l, i) => { l.intensity = obscur ? 0 : 1.05 + Math.sin(t * 0.004 + i * 2) * 0.08 + (Math.random() < 0.01 ? -0.4 : 0); });
-    hemi.intensity = obscur ? 0.04 : 0.42;
+    hemi.intensity = obscur ? 0.03 : 0.2;
+    if (s.spot) s.spot.intensity = obscur ? 0 : 1.7;
     lumJoueur.intensity = obscur ? 1.2 : 0.5; lumJoueur.distance = obscur ? 5.5 : 8;
     const sortie = portes.find(p => p && p.ep.etat === 'sortie');
     if (sortie) { const [lx, lz] = R.localDepuisFace(sortie.f, 0, -2); const v = new THREE.Vector3(lx, 2, lz); s.groupe.localToWorld(v); lumSortie.position.copy(v); lumSortie.intensity = 3.5; } else lumSortie.intensity = 0;
@@ -640,6 +667,7 @@
       const ang = -m.face * Math.PI / 2 + rotY; const nz = -Math.cos(ang); // normale extérieure de la face, composante sud
       const op = nz > 0.35 ? 0.16 : 1;
       m.mat.opacity += (op - m.mat.opacity) * 0.2; m.mat.depthWrite = m.mat.opacity > 0.9;
+      if (m.annexes) for (const a of m.annexes) { a.opacity = a.userData.op0 * Math.max(m.mat.opacity, 0.12); a.depthWrite = m.mat.depthWrite; }
     });
     // --- interface
     majInteraction(t, it, portes);
@@ -1490,7 +1518,7 @@
     if (camera.fov !== 56) { camera.fov = 56; camera.updateProjectionMatrix(); }
     camera.position.copy(cam); camera.lookAt(vise);
     lumJoueur.position.copy(vise).add(new THREE.Vector3(0, 2.2, 0));
-    s.murs.forEach(m => { m.mat.opacity = 1; m.mat.depthWrite = true; });
+    s.murs.forEach(m => { m.mat.opacity = 1; m.mat.depthWrite = true; if (m.annexes) for (const a of m.annexes) { a.opacity = a.userData.op0; a.depthWrite = true; } });
   }
   function finirRalenti(rp) {
     rp.fini = true; delete document.body.dataset.ralenti;
@@ -1632,6 +1660,17 @@
   // INTERFACE : menu, Coffre, notification
   // =====================================================================
   function dessinerPortrait(cv, look) {
+    dessinerPortrait2D(cv, look);
+    if (!R.portrait) return;
+    setTimeout(() => {
+      const url = R.portrait(look, cv.width * 2, cv.height * 2);
+      if (!url) return;
+      const img = new Image();
+      img.onload = () => { const x = cv.getContext('2d'); x.clearRect(0, 0, cv.width, cv.height); x.drawImage(img, 0, 0, cv.width, cv.height); };
+      img.src = url;
+    }, 0);
+  }
+  function dessinerPortrait2D(cv, look) {
     const x = cv.getContext('2d'), w = cv.width, h = cv.height;
     x.clearRect(0, 0, w, h);
     const peau = R.hex(R.PEAUX[look.peau] || R.PEAUX.jaune), tun = R.hex(look.tunique), pan = R.hex(look.pantalon);
@@ -1843,6 +1882,12 @@
     $('#btn-aide').addEventListener('click', () => { if (J.panneau === 'aide') fermerPanneaux(); else ouvrirAide(); });
     $('#btn-quitter').addEventListener('click', quitter);
     $('#btn-debug').addEventListener('click', () => { if (J.perso) relancerEvasion(J.perso.id); });
+    $('#btn-qualite').addEventListener('click', () => {
+      const ordre = ['haute', 'normale', 'basse'], q = ordre[(ordre.indexOf(qualite()) + 1) % 3];
+      D.reglages.qualite = q; sauverReglages(); appliquerQualite();
+      if (J.mode === 'jeu') construireSalleCourante(false);
+      message(q === 'haute' ? 'Qualité haute : ombres fines, textures détaillées.' : q === 'normale' ? 'Qualité normale : plus fluide sur tablette et téléphone.' : 'Qualité basse : sans ombres, pour les appareils modestes.');
+    });
     $('#btn-son').addEventListener('click', () => { D.reglages.son = !D.reglages.son; A.init(); A.volume(D.reglages.son); $('#btn-son').textContent = D.reglages.son ? 'Son : oui' : 'Son : non'; sauverReglages(); });
     $('#btn-chat').addEventListener('click', () => { D.reglages.chatMasque = !D.reglages.chatMasque; sauverReglages(); rendreChat(); });
     $('#abaque-valider').addEventListener('click', validerAbaque);
@@ -1933,6 +1978,7 @@
     document.body.classList.toggle('debug', !!J.debug);
     rendreMenu();
     $('#btn-son').textContent = D.reglages.son ? 'Son : oui' : 'Son : non';
+    appliquerQualite();
     requestAnimationFrame(boucle);
     // un prisonnier tente de s'évader : la salle est disponible
     setTimeout(() => {
