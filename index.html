@@ -121,7 +121,7 @@
   .barre { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
   .barre .btn { font-size: .82rem; padding: .35em .7em; }
   .barre kbd, .touches kbd { font-family: var(--f-texte); font-size: .7rem; border: 1px solid rgba(201,162,74,.4); padding: 0 .35em; border-radius: 2px; color: var(--or); }
-  #invite { left: 50%; bottom: 92px; transform: translateX(-50%); background: rgba(5,5,5,.82); border: 1px solid rgba(201,162,74,.45); padding: 6px 16px; font-size: .92rem; white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; }
+  #invite { left: 50%; bottom: 206px; transform: translateX(-50%); background: rgba(5,5,5,.82); border: 1px solid rgba(201,162,74,.45); padding: 6px 16px; font-size: .92rem; white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; }
   #invite kbd { border: 1px solid var(--or); color: var(--or); padding: 0 .4em; margin-right: .5em; font-family: var(--f-texte); }
   #message { left: 50%; top: 22%; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); text-align: center; font-family: var(--f-titre); font-size: 1.15rem; color: #f1e2b9; text-shadow: 0 2px 10px #000, 0 0 2px #000; opacity: 0; transition: opacity .6s; pointer-events: none; }
   #message.visible { opacity: 1; }
@@ -185,13 +185,21 @@
   @keyframes apparait { to { opacity: 1; } }
   @keyframes ecarte { from { letter-spacing: .1em; } to { letter-spacing: .5em; } }
 
-  /* ---------- tactile ---------- */
-  #pad, #tact-e, #tact-f { display: none; }
-  body.tactile[data-ecran="jeu"] #pad { display: block; position: fixed; left: 24px; bottom: 24px; width: 120px; height: 120px; border-radius: 50%; border: 1px solid rgba(201,162,74,.4); background: rgba(0,0,0,.35); z-index: 12; touch-action: none; }
-  #pad-bouton { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(201,162,74,.35); }
+  /* ---------- manette de direction (bas, au milieu) ---------- */
+  #croix { left: 50%; bottom: 14px; transform: translateX(-50%); display: grid; grid-template-areas: ". h ." "g p d" ". b ."; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 58px); gap: 3px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #croix .dir { width: 58px; height: 58px; border-radius: 50%; border: 3px solid var(--or-pale); background: rgba(5,5,5,.62); display: grid; place-items: center; padding: 0; cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent; transition: background .08s, border-color .08s, transform .08s; }
+  #croix .dir svg { width: 22px; height: 22px; fill: var(--or-pale); pointer-events: none; }
+  #croix .dir.actif { background: rgba(201,162,74,.38); border-color: var(--or); transform: scale(.94); }
+  #croix .dir[data-dir="haut"] { grid-area: h; } #croix .dir[data-dir="bas"] { grid-area: b; }
+  #croix .dir[data-dir="gauche"] { grid-area: g; } #croix .dir[data-dir="droite"] { grid-area: d; }
+  #croix .point { grid-area: p; place-self: center; width: 13px; height: 13px; border-radius: 50%; background: var(--or-pale); }
+  @media (max-width: 900px) { #chat { bottom: auto; top: 66px; width: 210px; } #chat-liste { max-height: 84px; } }
+  @media (max-width: 600px) { .barre .btn kbd { display: none; } .barre .btn { font-size: .74rem; padding: .3em .55em; } .identite b { font-size: .95rem; } .identite canvas { width: 30px; height: 35px; } #chat { top: 112px; width: 190px; } }
+  @media (max-width: 480px) { #croix { grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px); } #croix .dir { width: 52px; height: 52px; } #invite { bottom: 186px; } }
+  /* ---------- tactile : boutons d'action ---------- */
+  #tact-e, #tact-f { display: none; }
   body.tactile[data-ecran="jeu"] #tact-e, body.tactile[data-ecran="jeu"] #tact-f { display: block; position: fixed; z-index: 12; width: 64px; height: 64px; border-radius: 50%; }
-  body.tactile #tact-e { right: 24px; bottom: 200px; } body.tactile #tact-f { right: 100px; bottom: 170px; }
-  body.tactile #chat { width: 220px; }
+  body.tactile #tact-e { right: 18px; bottom: 20px; } body.tactile #tact-f { right: 18px; bottom: 96px; }
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
@@ -271,7 +279,13 @@
   <ul id="chat-liste"></ul>
   <input type="text" id="chat-saisie" maxlength="200" placeholder="Entrée pour parler aux présents" aria-label="Message aux personnes de la salle">
 </div>
-<div id="pad" class="hud"><div id="pad-bouton"></div></div>
+<div class="hud" id="croix" role="group" aria-label="Manette de direction">
+  <button type="button" class="dir" data-dir="haut" aria-label="Haut"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5 20 18H4Z"/></svg></button>
+  <button type="button" class="dir" data-dir="gauche" aria-label="Gauche"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12 18 4v16Z"/></svg></button>
+  <span class="point" aria-hidden="true"></span>
+  <button type="button" class="dir" data-dir="droite" aria-label="Droite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12 6 20V4Z"/></svg></button>
+  <button type="button" class="dir" data-dir="bas" aria-label="Bas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19 4 6h16Z"/></svg></button>
+</div>
 <button type="button" class="btn or hud" id="tact-e">E</button>
 <button type="button" class="btn hud" id="tact-f">F</button>
 
@@ -316,7 +330,7 @@
   <button type="button" class="mini fermer" data-fermer>Fermer</button>
   <h3>Commandes</h3>
   <dl class="touches">
-    <dt><kbd>Z</kbd> <kbd>Q</kbd> <kbd>S</kbd> <kbd>D</kbd> · flèches</dt><dd>Se déplacer</dd>
+    <dt><kbd>Z</kbd> <kbd>Q</kbd> <kbd>S</kbd> <kbd>D</kbd> · flèches</dt><dd>Se déplacer (ou la manette en bas de l’écran, à maintenir)</dd>
     <dt><kbd>Maj</kbd></dt><dd>Courir</dd>
     <dt><kbd>E</kbd></dt><dd>Interagir, examiner, ramasser, monter</dd>
     <dt><kbd>F</kbd></dt><dd>Descendre par la trappe</dd>

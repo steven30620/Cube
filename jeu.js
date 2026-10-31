@@ -331,7 +331,7 @@
   const J = {
     mode: 'menu', monde: null, cube: 0, perso: null, joueur: null, salle: null, coques: new Map(), structure: null,
     declencheurs: [], fossesOuvertes: new Set(), herseLevee: null, enigmes: new Map(), salves: [],
-    distants: new Map(), chat: [], memoire: null, gains: [], deso: 0, touches: {}, zoom: 1, secousse: 0,
+    distants: new Map(), chat: [], croix: { haut: false, bas: false, gauche: false, droite: false }, memoire: null, gains: [], deso: 0, touches: {}, zoom: 1, secousse: 0,
     dernierEtatSon: new Map(), derniereG: -1, donneesChangees: true, interaction: null, panneau: null, bulles: new Map(),
     recevoirPiege(d, de) {
       if (!d || typeof d.c !== 'number' || typeof d.piege !== 'number' || typeof d.t0 !== 'number') return;
@@ -699,9 +699,10 @@
     if (k.KeyS || k.ArrowDown) iz += 1;
     if (k.KeyA || k.KeyQ || k.ArrowLeft) ix -= 1;
     if (k.KeyD || k.ArrowRight) ix += 1;
-    if (J.tactile) { ix += J.tactile.x; iz += J.tactile.z; }
+    const cr = J.croix;
+    if (cr.haut) iz -= 1; if (cr.bas) iz += 1; if (cr.gauche) ix -= 1; if (cr.droite) ix += 1;
     const n = Math.hypot(ix, iz);
-    const court = (k.ShiftLeft || k.ShiftRight || (J.tactile && J.tactile.court)) && n > 0;
+    const court = (k.ShiftLeft || k.ShiftRight) && n > 0;
     const v = (3.4 + J.perso.stats.agilite * 0.022) * (court ? 1.6 : 1) * (J.salle.traits.chaines && ctx.fort ? 0.85 : 1);
     if (n < 0.05) { jo.vitesse *= 0.8; return; }
     ix /= Math.max(1, n); iz /= Math.max(1, n);
@@ -1354,7 +1355,7 @@
   }
   function quitter() {
     if (J.mode !== 'jeu') return;
-    fermerPanneaux();
+    fermerPanneaux(); relacherCroix();
     if (J.joueur.vivant) { D.tentative = Object.assign(D.tentative || {}, { cube: J.cube, x: J.joueur.x, z: J.joueur.z }); sauverTentative(); }
     N.presence({ v: 0 });
     J.mode = 'menu'; document.body.dataset.ecran = 'menu';
@@ -1590,7 +1591,16 @@
       else if (e.code === 'KeyH') { if (J.panneau === 'aide') fermerPanneaux(); else ouvrirAide(); }
     });
     window.addEventListener('keyup', e => { J.touches[e.code] = false; if (e.code === 'KeyE') J.herseMaintien = 0; });
-    window.addEventListener('blur', () => { J.touches = {}; });
+    window.addEventListener('blur', () => { J.touches = {}; relacherCroix(); });
+    // manette de direction : on maintient un bouton (souris ou doigt) pour avancer
+    document.querySelectorAll('#croix .dir').forEach(b => {
+      const d = b.dataset.dir;
+      const appui = e => { e.preventDefault(); J.croix[d] = true; b.classList.add('actif'); A.init(); try { b.setPointerCapture(e.pointerId); } catch (er) { /* */ } };
+      const fin = () => { J.croix[d] = false; b.classList.remove('actif'); };
+      b.addEventListener('pointerdown', appui);
+      ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => b.addEventListener(ev, fin));
+      b.addEventListener('contextmenu', e => e.preventDefault());
+    });
     $('#scene').addEventListener('wheel', e => { if (J.mode !== 'jeu') return; e.preventDefault(); J.zoom = clamp(J.zoom * (e.deltaY > 0 ? 1.08 : 0.93), 0.55, 1.7); }, { passive: false });
     // clic : examiner ce qui est sous la souris, si c'est à portée
     const ray = new THREE.Raycaster(), souris = new THREE.Vector2();
@@ -1639,15 +1649,11 @@
     // commandes tactiles
     if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
       document.body.classList.add('tactile');
-      const pad = $('#pad'), bouton = $('#pad-bouton'); let idT = null, c0 = null;
-      pad.addEventListener('pointerdown', e => { idT = e.pointerId; c0 = { x: e.clientX, y: e.clientY }; pad.setPointerCapture(idT); J.tactile = { x: 0, z: 0, court: false }; });
-      pad.addEventListener('pointermove', e => { if (e.pointerId !== idT) return; const dx = (e.clientX - c0.x) / 50, dy = (e.clientY - c0.y) / 50; const n = Math.hypot(dx, dy); J.tactile = { x: dx / Math.max(1, n), z: dy / Math.max(1, n), court: n > 1.6 }; bouton.style.transform = `translate(${clamp(dx, -1, 1) * 30}px, ${clamp(dy, -1, 1) * 30}px)`; });
-      const fin = () => { idT = null; J.tactile = null; bouton.style.transform = ''; };
-      pad.addEventListener('pointerup', fin); pad.addEventListener('pointercancel', fin);
       $('#tact-e').addEventListener('click', () => { if (J.panneau === 'texte' || J.panneau === 'plaque') fermerPanneaux(); else interagir(false); });
       $('#tact-f').addEventListener('click', () => interagir(true));
     }
   }
+  function relacherCroix() { Object.keys(J.croix).forEach(k => { J.croix[k] = false; }); document.querySelectorAll('#croix .dir').forEach(b => b.classList.remove('actif')); }
   function majReste() { let tot = 0; Object.keys(NOMS_STATS).forEach(k => { const v = +$('#recrue-' + k).value; tot += v; $('#recrue-' + k + '-v').textContent = v; }); $('#recrue-reste').textContent = tot <= 250 ? 'Points restants : ' + (250 - tot) : 'Trop de points : ' + tot + ' / 250.'; }
   function ouvrirAide() { fermerPanneaux(); J.panneau = 'aide'; $('#panneau-aide').hidden = false; }
 
