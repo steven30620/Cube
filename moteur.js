@@ -706,6 +706,8 @@
     16: ['labyrinthe'], 17: ['enigme'], 18: ['teleport'], 19: ['statue'], 20: ['herse', 'chaines'],
     21: ['instable', 'plafond'], 22: null, 23: ['labyrinthe', 'pointes', 'escalier'], 24: null, 25: ['pendule'],
   };
+  // pièges ajoutés aux salles piégées : ceux qui ne transforment pas la salle (ni murs mobiles, ni plates-formes, ni herses)
+  const EXTRAS_PIEGES = ['pointes', 'lamesMur', 'flammes', 'fleches', 'pendule', 'plafond', 'rouleau', 'scie', 'statue', 'engrenages', 'solDerobe'];
   const MORTELS = ['pointes', 'lamesMur', 'broyeur', 'flammes', 'fleches', 'solDerobe', 'pendule', 'herse', 'plafond',
     'rouleau', 'plateforme', 'scie', 'statue', 'engrenages', 'coulissant'];
   function genererPieges(m, id, famille, zone, r) {
@@ -724,6 +726,14 @@
     if (famille === 11 && r() < 0.4) types.push('scie');
     if (famille === 10 && r() < 0.4) types.push('rouleau');
     if (famille === 21 && r() < 0.3) types.push('escalier');
+    // Salles piégées : pièges mortels en plus (un de plus partout, deux une fois sur trois près de
+    // l'entrée et presque toujours au fond du Cube). Les salles vides, la Libération et les salles déjà
+    // combinées (Jugement, Mort) ne changent pas.
+    if (famille !== 0 && famille !== 22 && famille !== 24 && famille !== 25) {
+      const possibles = EXTRAS_PIEGES.filter(t => !types.includes(t) && !(types.includes('labyrinthe') && (t === 'rouleau' || t === 'engrenages')));
+      const n = 1 + (r() < 0.3 + zone * 0.11 ? 1 : 0);
+      for (let k = 0; k < n && possibles.length; k++) types.push(possibles.splice(Math.floor(r() * possibles.length), 1)[0]);
+    }
     if (famille !== 0 && famille !== 17 && famille !== 18 && r() < 0.06 + zone * 0.02) types.push('escalier');
     const sync = famille === 24 || famille === 22;
     const tempo = 1 - zone * 0.045;
@@ -736,59 +746,61 @@
     const voie = () => [-3.6, -1.2, 1.2, 3.6][entre(r, 0, 3)];
     switch (type) {
       case 'pointes': {
-        const c0 = entre(r, -4, 1) * 1.5, larg = entre(r, 2, 4) * 1.5;
+        const larg = entre(r, 4, 6) * 1.5, c0 = entre(r, -4, 4 - larg / 1.5) * 1.5; // 6 à 9 m de large sur 12
         return { type, axe, a0: c0, a1: Math.min(6, c0 + larg), motif: choisir(r, ['vague', 'damier', 'rangs']), periode: P(entre(r, 5000, 8000)), off };
       }
       case 'lamesMur': {
-        const n = entre(r, 2, 3), pos = [];
-        for (let k = 0; k < n; k++) pos.push(-4 + k * (8 / (n - 1 || 1)) + (r() - 0.5));
-        return { type, mur: entre(r, 0, 3), pos, long: 3 + r() * 4.5, periode: P(entre(r, 3500, 6000)), off, dec: 0.18 + r() * 0.2 };
+        const n = entre(r, 4, 6), pos = [];
+        for (let k = 0; k < n; k++) pos.push(-4.5 + k * (9 / (n - 1 || 1)) + (r() - 0.5) * 0.6);
+        return { type, mur: entre(r, 0, 3), pos, long: 5 + r() * 5, periode: P(entre(r, 3500, 6000)), off, dec: 0.18 + r() * 0.2 };
       }
-      case 'broyeur': { const c = (r() - 0.5) * 4; return { type, axe, c0: c - 1.9, c1: c + 1.9, periode: P(entre(r, 9000, 12500)), off }; }
+      case 'broyeur': { const hw = 2.6 + r() * 0.6, c = (r() - 0.5) * 2.6; return { type, axe, c0: c - hw, c1: c + hw, periode: P(entre(r, 9000, 12500)), off }; }
       case 'flammes': {
-        const n = entre(r, 2, 3), buses = [];
-        for (let k = 0; k < n; k++) buses.push({ mur: entre(r, 0, 3), pos: voie() + (r() - 0.5), long: 4 + r() * 6, dec: r() });
+        const n = entre(r, 4, 6), buses = [];
+        for (let k = 0; k < n; k++) buses.push({ mur: entre(r, 0, 3), pos: voie() + (r() - 0.5), long: 7 + r() * 4, dec: r() });
         return { type, buses, periode: P(entre(r, 4200, 6500)), off };
       }
       case 'fleches': {
-        const n = entre(r, 3, 5), trous = [];
+        const n = entre(r, 7, 11), trous = [];
         for (let k = 0; k < n; k++) trous.push(-4.8 + r() * 9.6);
         return { type, mur: entre(r, 0, 3), trous, periode: P(entre(r, 3800, 6000)), off, vitesse: 11 + zone };
       }
       case 'dalle': {
-        const n = entre(r, 1, 3), dalles = [];
+        const n = entre(r, 3, 6), dalles = [];
         for (let k = 0; k < n; k++) dalles.push({ x: (r() * 2 - 1) * 4, z: (r() * 2 - 1) * 4, mur: entre(r, 0, 3) });
         return { type, dalles };
       }
       case 'fosses': {
-        const cases = []; const n = entre(r, 3, 7) + zone;
+        const cases = []; const n = entre(r, 9, 15) + zone * 2;
         for (let k = 0; k < n; k++) {
           const ci = entre(r, 0, 7), cj = entre(r, 0, 7);
           if ((ci === 3 || ci === 4) && (cj === 3 || cj === 4)) continue;
+          // jamais de fosse cachée juste devant une porte : la mort à l'entrée serait inévitable
+          if (((ci === 3 || ci === 4) && (cj === 0 || cj === 7)) || ((cj === 3 || cj === 4) && (ci === 0 || ci === 7))) continue;
           cases.push([ci, cj]);
         }
         return { type, cases };
       }
       case 'solDerobe': {
-        const c = voie(); return { type, axe, c0: c - 1.5, c1: c + 1.5, sens: r() < 0.5 ? 1 : -1, periode: P(entre(r, 9000, 12000)), off };
+        const c = voie(); return { type, axe, c0: c - 2.6, c1: c + 2.6, sens: r() < 0.5 ? 1 : -1, periode: P(entre(r, 9000, 12000)), off };
       }
       case 'pendule': {
-        const n = entre(r, 2, 3), lignes = [];
-        for (let k = 0; k < n; k++) lignes.push({ axe: r() < 0.5 ? 'x' : 'z', c: -3.6 + k * 3.6 + (r() - 0.5), amp: 4.2, periode: P(entre(r, 2600, 3800)), off: Math.floor(r() * 4000) });
+        const n = entre(r, 3, 4), lignes = [];
+        for (let k = 0; k < n; k++) lignes.push({ axe: r() < 0.5 ? 'x' : 'z', c: -4.5 + k * 9 / (n - 1) + (r() - 0.5) * 0.6, amp: 4.2, periode: P(entre(r, 2600, 3800)), off: Math.floor(r() * 4000) });
         return { type, lignes };
       }
-      case 'herse': return { type, periode: P(entre(r, 6000, 9000)), off, faces: [0, 1, 2, 3].filter(() => r() < 0.6) };
-      case 'plafond': { const cx = (r() - 0.5) * 5, cz = (r() - 0.5) * 5, s = 1.7 + r() * 0.8; return { type, x0: cx - s, x1: cx + s, z0: cz - s, z1: cz + s, periode: P(entre(r, 8000, 11000)), off }; }
-      case 'rouleau': return { type, axe, c: voie(), larg: 3.2, periode: P(entre(r, 5000, 7500)), off };
-      case 'engrenages': return { type, axe, c: voie(), periode: P(entre(r, 6000, 8500)), off, rayon: 1.6 };
-      case 'plateforme': return { type, rayon: 3.4, vitesse: (r() < 0.5 ? -1 : 1) * (0.5 + r() * 0.5) / tempo, secteur: 1.1 + r() * 0.5, off };
+      case 'herse': return { type, periode: P(entre(r, 6000, 9000)), off, faces: [0, 1, 2, 3].filter(() => r() < 0.85) };
+      case 'plafond': { const cx = (r() - 0.5) * 3, cz = (r() - 0.5) * 3, s = 2.6 + r() * 0.9; return { type, x0: cx - s, x1: cx + s, z0: cz - s, z1: cz + s, periode: P(entre(r, 8000, 11000)), off }; }
+      case 'rouleau': return { type, axe, c: voie() * 0.8, larg: 5.0, rayon: 1.15, periode: P(entre(r, 5000, 7500)), off };
+      case 'engrenages': return { type, axe, c: voie(), periode: P(entre(r, 6000, 8500)), off, rayon: 1.9, epais: 1.2 };
+      case 'plateforme': return { type, rayon: 3.4, vitesse: (r() < 0.5 ? -1 : 1) * (0.5 + r() * 0.5) / tempo, secteur: 1.6 + r() * 0.6, off };
       case 'scie': {
-        const n = entre(r, 1, 3), rails = [];
+        const n = entre(r, 3, 5), rails = [];
         for (let k = 0; k < n; k++) rails.push({ axe: r() < 0.5 ? 'x' : 'z', c: voie(), periode: P(entre(r, 3200, 5200)), off: Math.floor(r() * 5000) });
-        return { type, rails };
+        return { type, rails, rayon: 0.95 };
       }
       case 'statue': {
-        const n = entre(r, 2, 4), coins = [[-4.8, -4.8], [4.8, -4.8], [4.8, 4.8], [-4.8, 4.8]], st = [];
+        const n = entre(r, 3, 4), coins = [[-4.8, -4.8], [4.8, -4.8], [4.8, 4.8], [-4.8, 4.8]], st = [];
         for (let k = 0; k < n; k++) st.push({ x: coins[k][0], z: coins[k][1], base: entre(r, 0, 3), dec: r() });
         return { type, statues: st, periode: P(entre(r, 5000, 7000)), off };
       }
@@ -806,9 +818,9 @@
         return { type, murs, periode: P(entre(r, 6000, 9000)), off };
       }
       case 'lumiere': {
-        const n = entre(r, 2, 3), f = [];
+        const n = entre(r, 3, 4), f = [];
         for (let k = 0; k < n; k++) f.push({ axe: r() < 0.5 ? 'x' : 'z', vitesse: 0.12 + r() * 0.12, dec: r() });
-        return { type, faisceaux: f, periode: P(entre(r, 3000, 4500)), off };
+        return { type, faisceaux: f, larg: 2.4, periode: P(entre(r, 3000, 4500)), off };
       }
       case 'temps': return { type, periode: P(entre(r, 8000, 11000)), ouvert: 0.32, off };
       case 'trompeur': return { type, mortel: r() < 0.55 };
@@ -818,7 +830,7 @@
         return { type, chaines: ch };
       }
       case 'instable': {
-        const d = []; for (let k = 0; k < 6; k++) d.push({ i: entre(r, 0, 3), j: entre(r, 0, 3), dec: r() });
+        const d = []; for (let k = 0; k < 9; k++) d.push({ i: entre(r, 0, 3), j: entre(r, 0, 3), dec: r() });
         return { type, dalles: d, periode: P(entre(r, 5000, 8000)), off };
       }
       case 'escalier': return { type, periode: P(entre(r, 7000, 10000)), off };

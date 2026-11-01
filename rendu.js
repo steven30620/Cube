@@ -954,9 +954,9 @@
         const fg = groupe(g); fg.rotation.y = ANGLE_FACE(b.mur);
         const buse = cyl(fg, 0.16, 0.22, 0.35, 10, M.bronze(), b.pos, 1.0, -DM + EP / 2 + 0.15); buse.rotation.x = Math.PI / 2;
         const jet = groupe(fg, b.pos, 1.0, -DM + EP / 2 + 0.3);
-        const f1 = cone(jet, 0.55, 1, M.flamme(), 0, 0, 0.5, 10); f1.rotation.x = -Math.PI / 2;
-        const f2 = cone(jet, 0.25, 1, M.flammeCoeur(), 0, 0, 0.5, 8); f2.rotation.x = -Math.PI / 2;
-        const lueur = halo(fg, 0xff8a3a, 3.2, b.pos, 1.0, -DM + EP / 2 + 1.6, 0.7); lueur.visible = false;
+        const f1 = cone(jet, 0.85, 1, M.flamme(), 0, 0, 0.5, 12); f1.rotation.x = -Math.PI / 2;
+        const f2 = cone(jet, 0.4, 1, M.flammeCoeur(), 0, 0, 0.5, 10); f2.rotation.x = -Math.PI / 2;
+        const lueur = halo(fg, 0xff8a3a, 3.6, b.pos, 1.0, -DM + EP / 2 + 1.6, 0.7); lueur.visible = false;
         return { b, jet, f1, f2, lueur };
       });
       const etat = (t, J) => {
@@ -975,7 +975,7 @@
           for (const J of jets) {
             const [k, act] = etat(t, J); if (!act) continue;
             const [a, d] = faceDepuisLocal(J.b.mur, x, z);
-            if (Math.abs(a - J.b.pos) < 0.5 + r && d < J.b.long * k + 0.4) return 'brule';
+            if (Math.abs(a - J.b.pos) < 0.8 + r && d < J.b.long * k + 0.4) return 'brule';
           }
           return null;
         },
@@ -1092,7 +1092,7 @@
         const piv = groupe(g, l.axe === 'x' ? 0 : l.c, HT, l.axe === 'x' ? l.c : 0);
         const bras = groupe(piv);
         boite(bras, 0.08, Lb, 0.08, M.fer(), 0, -Lb / 2, 0);
-        const lame = boite(bras, l.axe === 'x' ? 0.08 : 1.6, 0.55, l.axe === 'x' ? 1.6 : 0.08, M.acier(), 0, -Lb, 0);
+        const lame = boite(bras, l.axe === 'x' ? 0.08 : 2.6, 0.55, l.axe === 'x' ? 2.6 : 0.08, M.acier(), 0, -Lb, 0);
         boite(g, l.axe === 'x' ? DM * 2 : 0.05, 0.01, l.axe === 'x' ? 0.05 : DM * 2, mat(0x000000, { op: 0.35 }), l.axe === 'x' ? 0 : l.c, 0.006, l.axe === 'x' ? l.c : 0);
         return { l, piv, bras };
       });
@@ -1105,7 +1105,7 @@
             if (y > 1.6) continue;
             const along = P.l.axe === 'x' ? x : z, perp = P.l.axe === 'x' ? z : x;
             const sx = s;
-            if (Math.abs(along - sx) < 0.12 + r && Math.abs(perp - P.l.c) < 0.8 + r) return 'lames';
+            if (Math.abs(along - sx) < 0.12 + r && Math.abs(perp - P.l.c) < 1.3 + r) return 'lames';
           }
           return null;
         },
@@ -1157,7 +1157,7 @@
     },
 
     rouleau(p, g, ctx, idx, rayon) {
-      const R = rayon || 0.85, ax = p.axe;
+      const R = p.rayon || rayon || 0.85, ax = p.axe;
       const rg = groupe(g, 0, R, 0);
       const cy = cyl(rg, R, R, p.larg, 16, mat(0x3a3530, { r: 0.6, m: 0.6 }), 0, 0, 0);
       cy.rotation.z = ax === 'z' ? Math.PI / 2 : 0; if (ax === 'x') cy.rotation.x = Math.PI / 2;
@@ -1172,18 +1172,18 @@
     },
 
     engrenages(p, g, ctx) {
-      const R = p.rayon, ax = p.axe;
+      const R = p.rayon, ax = p.axe, ep = p.epais || 0.4;
       const rg = groupe(g, 0, R, 0);
       const roue = groupe(rg);
-      cyl(roue, R, R, 0.4, 20, mat(0x5a4a2a, { r: 0.4, m: 0.85 }), 0, 0, 0).rotation.x = Math.PI / 2;
-      for (let i = 0; i < 14; i++) { const a = i / 14 * TAU; boite(roue, 0.3, 0.36, 0.42, M.bronze(), Math.cos(a) * (R + 0.12), Math.sin(a) * (R + 0.12), 0).rotation.z = a; }
-      cyl(roue, 0.3, 0.3, 0.5, 10, M.fer(), 0, 0, 0).rotation.x = Math.PI / 2;
+      cyl(roue, R, R, ep, 28, mat(0x5a4a2a, { r: 0.4, m: 0.85 }), 0, 0, 0).rotation.x = Math.PI / 2;
+      for (let i = 0; i < 16; i++) { const a = i / 16 * TAU; boite(roue, 0.3, 0.36, ep + 0.02, M.bronze(), Math.cos(a) * (R + 0.12), Math.sin(a) * (R + 0.12), 0).rotation.z = a; }
+      cyl(roue, 0.3, 0.3, ep + 0.1, 12, M.fer(), 0, 0, 0).rotation.x = Math.PI / 2;
       if (ax === 'z') rg.rotation.y = Math.PI / 2;
-      boite(g, ax === 'x' ? DM * 2 : 0.5, 0.02, ax === 'x' ? 0.5 : DM * 2, M.noir(), ax === 'x' ? 0 : p.c, 0.01, ax === 'x' ? p.c : 0);
+      boite(g, ax === 'x' ? DM * 2 : ep + 0.1, 0.02, ax === 'x' ? ep + 0.1 : DM * 2, M.noir(), ax === 'x' ? 0 : p.c, 0.01, ax === 'x' ? p.c : 0);
       const pos = t => (tri(fr(t, p.periode * ctx.tempo('rouleau'), p.off)) * 2 - 1) * (DM - R - 0.3);
       return {
         maj(t) { const s = pos(t); if (ax === 'x') rg.position.set(s, R, p.c); else rg.position.set(p.c, R, s); roue.rotation.z = -s / R; },
-        danger(t, x, z, r) { const s = pos(t), a = ax === 'x' ? x : z, q = ax === 'x' ? z : x; return Math.abs(a - s) < R * 0.85 + r && Math.abs(q - p.c) < 0.25 + r ? 'broye' : null; },
+        danger(t, x, z, r) { const s = pos(t), a = ax === 'x' ? x : z, q = ax === 'x' ? z : x; return Math.abs(a - s) < R * 0.85 + r && Math.abs(q - p.c) < ep * 0.6 + r ? 'broye' : null; },
         son() { return 'engrenage'; },
       };
     },
@@ -1212,15 +1212,15 @@
       const sc = p.rails.map(rl => {
         boite(g, rl.axe === 'x' ? DM * 2 - 0.5 : 0.18, 0.02, rl.axe === 'x' ? 0.18 : DM * 2 - 0.5, M.noir(), rl.axe === 'x' ? 0 : rl.c, 0.01, rl.axe === 'x' ? rl.c : 0);
         const sg = groupe(g, 0, 0.35, 0);
-        const d = cyl(sg, 0.72, 0.72, 0.05, 24, M.acier(), 0, 0, 0); d.rotation.x = Math.PI / 2;
+        const Rs = p.rayon || 0.72, d = cyl(sg, Rs, Rs, 0.05, 32, M.acier(), 0, 0, 0); d.rotation.x = Math.PI / 2;
         if (rl.axe === 'z') sg.rotation.y = Math.PI / 2;
-        for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; const c = cone(d, 0.08, 0.16, M.acier(), Math.cos(a) * 0.78, 0, Math.sin(a) * 0.78, 4); c.rotation.z = -Math.PI / 2; c.rotation.y = -a; }
+        for (let i = 0; i < 16; i++) { const a = i / 16 * TAU; const c = cone(d, 0.08, 0.16, M.acier(), Math.cos(a) * (Rs + 0.06), 0, Math.sin(a) * (Rs + 0.06), 4); c.rotation.z = -Math.PI / 2; c.rotation.y = -a; }
         return { rl, sg, d };
       });
       const pos = (t, S) => (tri(fr(t, S.rl.periode * ctx.tempo('lames'), S.rl.off)) * 2 - 1) * (DM - 1);
       return {
         maj(t) { for (const S of sc) { const s = pos(t, S); if (S.rl.axe === 'x') S.sg.position.set(s, 0.35, S.rl.c); else S.sg.position.set(S.rl.c, 0.35, s); S.d.rotation.y = t * 0.03; } },
-        danger(t, x, z, r) { for (const S of sc) { const s = pos(t, S), a = S.rl.axe === 'x' ? x : z, q = S.rl.axe === 'x' ? z : x; if (Math.abs(a - s) < 0.6 + r && Math.abs(q - S.rl.c) < 0.1 + r) return 'scie'; } return null; },
+        danger(t, x, z, r) { const Rs = p.rayon || 0.72; for (const S of sc) { const s = pos(t, S), a = S.rl.axe === 'x' ? x : z, q = S.rl.axe === 'x' ? z : x; if (Math.abs(a - s) < Rs * 0.85 + r && Math.abs(q - S.rl.c) < 0.1 + r) return 'scie'; } return null; },
         son() { return 'scie'; },
       };
     },
@@ -1235,8 +1235,8 @@
         boite(tete, 0.5, 0.18, 0.4, M.or(), 0, -0.15, 0.55);
         const yeux = boite(tete, 0.5, 0.08, 0.05, mat(0xff5020, { basic: true, add: true, op: 0.2 }), 0, 0.12, 0.52);
         const jet = groupe(tete, 0, -0.1, 0.7);
-        const f1 = cone(jet, 0.75, 1, M.flamme(), 0, 0, 0.5, 10); f1.rotation.x = -Math.PI / 2;
-        const f2 = cone(jet, 0.3, 1, M.flammeCoeur(), 0, 0, 0.5, 8); f2.rotation.x = -Math.PI / 2;
+        const f1 = cone(jet, 1.2, 1, M.flamme(), 0, 0, 0.5, 12); f1.rotation.x = -Math.PI / 2;
+        const f2 = cone(jet, 0.5, 1, M.flammeCoeur(), 0, 0, 0.5, 10); f2.rotation.x = -Math.PI / 2;
         const versCentre = Math.atan2(-s.x, -s.z);
         return { s, k, tete, yeux, jet, versCentre };
       });
@@ -1251,7 +1251,7 @@
             if (feu(t, S) !== 1) continue;
             const a = angleDe(t, S), dx = x - S.s.x, dz = z - S.s.z;
             const av = dx * Math.sin(a) + dz * Math.cos(a), lat = dx * Math.cos(a) - dz * Math.sin(a);
-            if (av > 0.4 && av < 7.6 && Math.abs(lat) < 0.45 + av * 0.07 + r) return 'brule';
+            if (av > 0.4 && av < 7.6 && Math.abs(lat) < 0.6 + av * 0.1 + r) return 'brule';
           }
           return null;
         },
@@ -1307,12 +1307,13 @@
     },
 
     lumiere(p, g, ctx) {
+      const lb = p.larg || 1.4;
       const fs = p.faisceaux.map(f => {
-        const m = boite(g, f.axe === 'x' ? 1.4 : DM * 2, 0.01, f.axe === 'x' ? DM * 2 : 1.4, mat(0xfff1c2, { basic: true, add: true, op: 0.2 }), 0, 0.03, 0);
-        const col = boite(g, f.axe === 'x' ? 1.4 : DM * 2, HT, f.axe === 'x' ? DM * 2 : 1.4, mat(0xff8a2a, { basic: true, add: true, op: 0.5 }), 0, HT / 2, 0);
+        const m = boite(g, f.axe === 'x' ? lb : DM * 2, 0.01, f.axe === 'x' ? DM * 2 : lb, mat(0xfff1c2, { basic: true, add: true, op: 0.2 }), 0, 0.03, 0);
+        const col = boite(g, f.axe === 'x' ? lb : DM * 2, HT, f.axe === 'x' ? DM * 2 : lb, mat(0xff8a2a, { basic: true, add: true, op: 0.5 }), 0, HT / 2, 0);
         return { f, m, col };
       });
-      const pos = (t, F) => -DM + 0.7 + ((t / 1000 * F.f.vitesse * 10 + F.f.dec * 12) % (DM * 2 - 1.4));
+      const pos = (t, F) => -DM + lb / 2 + ((t / 1000 * F.f.vitesse * 10 + F.f.dec * 12) % (DM * 2 - lb));
       const etat = t => { const u = fr(t, p.periode * ctx.tempo('flammes'), p.off); return u < 0.68 ? 0 : u < 0.85 ? 1 : u < 0.95 ? 2 : 0; };
       return {
         maj(t) {
@@ -1323,7 +1324,7 @@
             F.m.material = mat(0xfff1c2, { basic: true, add: true, op: e === 1 ? 0.55 : 0.2 }); F.col.visible = e === 2;
           }
         },
-        danger(t, x, z, r) { if (etat(t) !== 2) return null; for (const F of fs) { const s = pos(t, F), a = F.f.axe === 'x' ? x : z; if (Math.abs(a - s) < 0.7 + r * 0.5) return 'brule'; } return null; },
+        danger(t, x, z, r) { if (etat(t) !== 2) return null; for (const F of fs) { const s = pos(t, F), a = F.f.axe === 'x' ? x : z; if (Math.abs(a - s) < lb / 2 + r * 0.5) return 'brule'; } return null; },
         son(t) { const e = etat(t); return e === 2 ? 'flamme' : e === 1 ? 'sifflement' : ''; },
       };
     },
@@ -1347,11 +1348,11 @@
           for (const e of ev) {
             const dt = t - e.t0; if (dt < 600) continue;
             const h = dt < 700 ? (dt - 600) / 100 : dt < 1500 ? 1 : Math.max(0, 1 - (dt - 1500) / 500);
-            for (let q = 0; q < 20 && n < 40; q++) { const a = q / 20 * TAU * 3, rr = 0.3 + (q % 7) * 0.32; tmp.position.set(e.x + Math.cos(a) * rr, -0.5 + h, e.z + Math.sin(a) * rr); tmp.rotation.set(0, 0, 0); tmp.updateMatrix(); pics.setMatrixAt(n++, tmp.matrix); }
+            for (let q = 0; q < 20 && n < 40; q++) { const a = q / 20 * TAU * 3, rr = 0.3 + (q % 7) * 0.47; tmp.position.set(e.x + Math.cos(a) * rr, -0.5 + h, e.z + Math.sin(a) * rr); tmp.rotation.set(0, 0, 0); tmp.updateMatrix(); pics.setMatrixAt(n++, tmp.matrix); }
           }
           pics.count = n; pics.instanceMatrix.needsUpdate = true; pics.visible = n > 0;
         },
-        danger(t, x, z) { for (const e of actifs(t)) { const dt = t - e.t0; if (dt > 640 && dt < 1500 && Math.hypot(x - e.x, z - e.z) < 2.3) return 'pointes'; } return null; },
+        danger(t, x, z) { for (const e of actifs(t)) { const dt = t - e.t0; if (dt > 640 && dt < 1500 && Math.hypot(x - e.x, z - e.z) < 3.2) return 'pointes'; } return null; },
         son(t) { return actifs(t).some(e => t - e.t0 < 300) ? 'cloche' : actifs(t).some(e => t - e.t0 > 600 && t - e.t0 < 800) ? 'pointes' : ''; },
       };
     },
