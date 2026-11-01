@@ -883,10 +883,65 @@
   ];
   const MOTS_FOIS = ['', 'une', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept'];
   const LUO_SHU = [[4, 9, 2], [3, 5, 7], [8, 1, 6]];
+  // ---------------------------------------------------------------------
+  // Énigmes du document (enigmes.js, 200 énigmes en 5 niveaux). Chaque porte d'une salle a la sienne ;
+  // le niveau suit la zone (plus on s'éloigne de l'entrée, plus c'est dur), à un cran près une fois
+  // sur trois. La porte de la Libération garde le compte de Han Xin, généré.
+  // ---------------------------------------------------------------------
+  const ENIGMES = typeof module !== 'undefined' && module.exports ? require('./enigmes.js') : (racine.ENIGMES_CUBE || []);
+  const NIVEAU_ZONE = [1, 2, 2, 3, 4, 4, 5];
+  let parNiveau = null;
+  function enigmesNiveau(n) {
+    if (!parNiveau) { parNiveau = [[], [], [], [], [], []]; for (const e of ENIGMES) if (e.niveau >= 1 && e.niveau <= 5) parNiveau[e.niveau].push(e); }
+    for (let d = 0; d < 5; d++) { const l = parNiveau[n - d] || parNiveau[n + d]; if (l && l.length) return l; }
+    return [];
+  }
+  function enigmeDocument(m, id, face, z) {
+    const r = alea(h32(m.graine, id, 4242));
+    const j = r(), niveau = Math.max(1, Math.min(5, NIVEAU_ZONE[Math.max(0, Math.min(6, z))] + (j < 0.17 ? -1 : j > 0.83 ? 1 : 0)));
+    const liste = enigmesNiveau(niveau);
+    if (!liste.length) return null;
+    const e = liste[(Math.floor(r() * liste.length) + face * 7) % liste.length]; // 6 faces : 6 énigmes différentes
+    return { type: 'document', n: e.n, niveau: e.niveau, serie: e.serie, titre: e.titre, lignes: e.lignes.slice(), consigne: e.consigne, attendu: e.attendu, solution: e.solution, figure: null };
+  }
+  /** Découpe une réponse tapée : nombres (« 1 080 », « 0,5 »), fractions (« 2/5 »), oui / non.
+   *  Les signes moins sont ignorés (« 28-30-32 » = trois nombres), les unités aussi (« m² », « 6 h 15 »).
+   *  milliers : « 1 080 » se lit 1080 ; sans, il se lit 1 puis 80 (utile pour « 112 144 »). */
+  function lireReponse(brut, milliers) {
+    let s = String(brut == null ? '' : brut).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (milliers !== false) s = s.replace(/(\d)[ \u00a0\u202f](?=\d{3}(?!\d))/g, '$1');
+    s = s.replace(/([a-z])[23](?![0-9])/g, '$1');
+    const jetons = [], re = /(\d+(?:[.,]\d+)?)\s*\/\s*(\d+)|(\d+(?:[.,]\d+)?)|\b(oui|non)\b/g;
+    let x;
+    while ((x = re.exec(s))) {
+      if (x[1] != null) jetons.push({ num: parseFloat(x[1].replace(',', '.')), den: parseInt(x[2], 10) });
+      else if (x[3] != null) jetons.push({ v: parseFloat(x[3].replace(',', '.')) });
+      else jetons.push({ mot: x[4] });
+    }
+    return jetons;
+  }
+  function jetonVaut(a, j) {
+    if (typeof a === 'number') return j.v != null && Math.abs(j.v - Math.abs(a)) < 1e-6;
+    if (typeof a === 'string') return j.mot === a;
+    if (a && a.p != null) { // probabilité : fraction égale, pourcentage à 0,6 près, ou décimal à 0,006 près
+      const x = a.p / a.q;
+      if (j.den != null) return j.den > 0 && Math.abs(j.num / j.den - x) < 1e-9;
+      if (j.v == null) return false;
+      return j.v > 1 ? Math.abs(j.v - 100 * x) <= 0.6 : Math.abs(j.v - x) <= 0.006;
+    }
+    return false;
+  }
+  /** La réponse tapée ouvre-t-elle ce verrou ? (énigme du document ou énigme générée) */
+  function verifierReponse(e, brut) {
+    const alts = e.attendu || [[e.reponse]];
+    return [lireReponse(brut, true), lireReponse(brut, false)].some(j => alts.some(alt => alt.length === j.length && alt.every((a, i) => jetonVaut(a, j[i]))));
+  }
+
   function enigmePorte(m, id, face) {
     const sp = specSalle(m, id);
     const r = alea(h32(m.graine, id, face + 1, 9191));
     const z = sp.zone;
+    if (id !== m.idLib) { const e = enigmeDocument(m, id, face, z); if (e) return e; }
     const types = z <= 0 ? ['suite', 'devinette', 'cage', 'balance']
       : z <= 2 ? ['suite', 'devinette', 'cage', 'balance', 'soldats', 'carre']
         : ['suite', 'devinette', 'cage', 'balance', 'soldats', 'carre', 'ages'];
@@ -1014,7 +1069,7 @@
     creerMonde, slotXYZ, voisinSlot, directionEntre, instant, evenementsCycle, paliersColere,
     etatCircuit, compteMouv, circuitBouge, indiceSalleCircuit, salleIndiceCircuit, salleAuSlot, positionSalle, orientation,
     slotImplique, etatPorte, porteMonde, faceVersMonde, mondeVersFace, sortieOuverte, prochainMouvement, alerte, codePorte,
-    specSalle, zoneDe, stadeCorps, cibleTeleport, enigmePorte, autoTest,
+    specSalle, zoneDe, stadeCorps, cibleTeleport, enigmePorte, lireReponse, verifierReponse, ENIGMES, autoTest,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = MoteurCube;
   else racine.MoteurCube = MoteurCube;

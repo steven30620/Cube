@@ -156,8 +156,9 @@
   #verrou-figure { display: block; max-width: 100%; margin: 0 0 12px; border: 1px solid #5a4a2a; }
   #verrou-figure[hidden] { display: none; }
   #verrou-form .ligne { display: flex; gap: 8px; flex-wrap: wrap; }
-  #verrou-reponse { width: 10ch; font-family: var(--f-titre); font-size: 1.4rem; font-variant-numeric: tabular-nums; background: #050505; border: 1px solid var(--or); color: #f1e2b9; padding: .2em .5em; }
-  #verrou-etat { margin: 10px 0 0; color: var(--cendre); font-size: .9rem; }
+  #verrou-reponse { width: 12ch; font-family: var(--f-titre); font-size: 1.4rem; font-variant-numeric: tabular-nums; background: #050505; border: 1px solid var(--or); color: #f1e2b9; padding: .2em .5em; }
+  #verrou-etat { margin: 10px 0 0; color: var(--cendre); font-size: .9rem; white-space: pre-line; max-width: 62ch; }
+  #verrou-niveau { letter-spacing: .06em; text-transform: none; }
   #verrou-etat.ouvert { color: #8fd3b0; } #verrou-etat.faux { color: #e07a6a; }
   #dialogue-corps { white-space: pre-line; max-width: 62ch; }
   .entree.enigme { border-left-color: #6fb7ff; } .entree.enigme .corps { font-family: var(--f-texte); font-size: .9rem; }
@@ -329,13 +330,13 @@
     <div><p class="legende">Cadran</p><div id="cadran"></div><p id="plaque-etat"></p><p id="plaque-obs"></p></div>
   </div>
   <div id="verrou">
-    <p class="legende">Verrou à énigme</p>
+    <p class="legende">Verrou à énigme<span id="verrou-niveau"></span></p>
     <h4 id="verrou-titre"></h4>
     <p id="verrou-texte"></p>
     <canvas id="verrou-figure" hidden></canvas>
     <form id="verrou-form" autocomplete="off">
       <label for="verrou-reponse" class="legende">Ta réponse</label>
-      <div class="ligne"><input type="text" id="verrou-reponse" inputmode="numeric" maxlength="7" placeholder="Un nombre"><button type="submit" class="btn or">Tourner la clé</button></div>
+      <div class="ligne"><input type="text" id="verrou-reponse" inputmode="numeric" maxlength="40" placeholder="Un nombre"><button type="submit" class="btn or">Tourner la clé</button></div>
     </form>
     <p id="verrou-etat"></p>
   </div>
@@ -395,6 +396,7 @@
 <div id="dialogue" hidden><section class="panneau" aria-labelledby="dialogue-titre"><h3 id="dialogue-titre"></h3><p id="dialogue-corps"></p><button type="button" class="btn or" id="dialogue-ok">Fermer</button></section></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="enigmes.js"></script>
 <script src="moteur.js"></script>
 <script src="rendu.js"></script>
 <script src="jeu.js"></script>

@@ -1266,17 +1266,21 @@
     const e = C.enigmePorte(J.monde, J.cube, face);
     J.verrouOuvert = { face, e, cle };
     $('#verrou-titre').textContent = e.titre;
+    $('#verrou-niveau').textContent = e.niveau ? ' · difficulté ' + '●'.repeat(e.niveau) + '○'.repeat(5 - e.niveau) + ' · ' + e.serie : '';
     $('#verrou-texte').textContent = e.lignes.join('\n');
     const fig = $('#verrou-figure');
     fig.hidden = !e.figure;
     if (e.figure) dessinerFigure(fig, e.figure);
     $('#verrou-form').hidden = ouvert;
-    $('#verrou-etat').textContent = ouvert ? 'Le verrou est ouvert. Les battants sont libres.' : 'La réponse est un nombre entier.';
+    $('#verrou-etat').textContent = ouvert ? 'Le verrou est ouvert. Les battants sont libres.' + (e.solution ? '\nSolution : ' + e.solution : '') : (e.consigne || 'La réponse est un nombre entier.');
     $('#verrou-etat').className = ouvert ? 'ouvert' : '';
+    const unNombre = !e.attendu || (e.attendu.length === 1 && e.attendu[0].length === 1 && typeof e.attendu[0][0] === 'number' && e.attendu[0][0] >= 0 && Number.isInteger(e.attendu[0][0]));
+    $('#verrou-reponse').inputMode = unNombre ? 'numeric' : 'text';
+    $('#verrou-reponse').placeholder = unNombre ? 'Un nombre' : 'Ta réponse';
     $('#verrou-reponse').value = '';
     if (!ouvert) {
       const sp = J.salle.spec, deja = J.carnet.entrees.some(x => x.type === 'enigme' && x.cle === cle);
-      if (!deja) { J.carnet.entrees.unshift({ t: N.maintenant(), type: 'enigme', cle, salle: decrireSalle(sp), points: face + 1, titre: e.titre, texte: e.lignes.join(' '), dent: J.it.p }); J.carnetModifie = true; }
+      if (!deja) { J.carnet.entrees.unshift({ t: N.maintenant(), type: 'enigme', cle, salle: decrireSalle(sp), points: face + 1, titre: e.titre, texte: e.lignes.join(' ') + (e.consigne ? ' (' + e.consigne + ')' : ''), dent: J.it.p }); J.carnetModifie = true; }
       setTimeout(() => { if (J.panneau === 'plaque') $('#verrou-reponse').focus({ preventScroll: true }); }, 60);
     }
   }
@@ -1284,19 +1288,18 @@
     const v = J.verrouOuvert; if (!v || !J.joueur || !J.joueur.vivant) return;
     const t = N.maintenant();
     if (t < J.verrouGrippe) { $('#verrou-etat').textContent = 'Le mécanisme est encore grippé. Attends un instant.'; return; }
-    const brut = $('#verrou-reponse').value.replace(/[\s.]/g, '');
-    const n = /^\d{1,7}$/.test(brut) ? parseInt(brut, 10) : NaN;
-    if (Number.isNaN(n)) { $('#verrou-etat').textContent = 'Écris un nombre entier, en chiffres.'; return; }
-    if (n === v.e.reponse) {
+    const brut = $('#verrou-reponse').value;
+    if (!C.lireReponse(brut).length) { $('#verrou-etat').textContent = 'Écris ta réponse en chiffres. ' + (v.e.consigne || ''); $('#verrou-etat').className = ''; return; }
+    if (C.verifierReponse(v.e, brut)) {
       J.verrous.add(v.cle);
       D.tentative = Object.assign(D.tentative || {}, { ouvertes: [...J.verrous].slice(-500) }); sauverTentative();
       A.jouer('cloche', 0.6); A.jouer('porte', 0.8);
-      $('#verrou-form').hidden = true; $('#verrou-etat').textContent = 'Un déclic. Le verrou est ouvert.'; $('#verrou-etat').className = 'ouvert';
+      $('#verrou-form').hidden = true; $('#verrou-etat').textContent = 'Un déclic. Le verrou est ouvert.' + (v.e.solution ? '\nSolution : ' + v.e.solution : ''); $('#verrou-etat').className = 'ouvert';
       message('Le verrou cède dans un déclic.');
     } else {
       J.verrouGrippe = t + 4000;
       A.jouer('verrou', 0.8);
-      $('#verrou-etat').textContent = 'Le verrou grince et se grippe. Ce n’est pas le bon nombre.'; $('#verrou-etat').className = 'faux';
+      $('#verrou-etat').textContent = 'Le verrou grince et se grippe. Ce n’est pas la bonne réponse.' + (v.e.consigne ? '\n' + v.e.consigne : ''); $('#verrou-etat').className = 'faux';
     }
   }
   function dessinerFigure(cv, f) {

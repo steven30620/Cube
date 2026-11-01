@@ -26,7 +26,7 @@ def main():
         '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>':
             '<script>/* three.js r128 — licence MIT */\n' + lire(sys.argv[1]) + '\n</script>',
     }
-    for nom in ('moteur.js', 'rendu.js', 'jeu.js'):
+    for nom in ('enigmes.js', 'moteur.js', 'rendu.js', 'jeu.js'):
         remplacements[f'<script src="{nom}"></script>'] = '<script>\n' + lire(os.path.join(ICI, nom)) + '\n</script>'
     for avant, apres in remplacements.items():
         if avant not in page:
