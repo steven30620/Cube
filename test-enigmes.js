@@ -1,4 +1,4 @@
-/* Vérifie les verrous à énigme : node outils/cube-artefact/test-enigmes.js
+/* Vérifie les verrous à énigme : node test-enigmes.js
    (à relancer après chaque import du document avec importer-enigmes.py). */
 const C = require('./moteur.js');
 const E = C.ENIGMES;
