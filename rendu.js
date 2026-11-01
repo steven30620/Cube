@@ -418,12 +418,15 @@
   // jambes 153, hanches 22, torse 160 (150 → 190 de large), cou 12, tête 104 × 143, tenon 23 × 62.
   // Recalée ensuite sur le plan coté de la vraie pièce (1 mm = 12,24 unités) : tête 10,2 × 8,5 mm
   // (125 × 104, coins R2), hanches 15,4 mm (190), mains Ø 5,1 mm percées Ø 3,1 mm, tenon creux Ø 4,9 mm.
+  // Profil relevé sur la figurine en bois officielle : jambes 172 (au lieu de 153), hanches 25, torse
+  // profond de 98, jambe au dos droit, cuisse arrondie autour de l'axe de hanche, tibia en retrait, pied
+  // qui dépasse devant ; épaule 12 sous le haut du torse, avant-bras vers l'avant, main devant les hanches.
   // 1 px = K unités ; la figurine est ensuite agrandie de 1,3 (corps.scale).
   // ---------------------------------------------------------------------
   const K = 0.0037;
   const FIG = {
-    jambeH: 153 * K, piedH: 28 * K, jambeL: 92 * K, ecart: 6 * K, prof: 97 * K,
-    hancheH: 22 * K, largeur: 190 * K,
+    jambeH: 172 * K, piedH: 28 * K, jambeL: 92 * K, ecart: 6 * K, prof: 97 * K,
+    hancheH: 25 * K, largeur: 190 * K,
     torseH: 160 * K, torseHaut: 150 * K,
     couH: 12 * K, couR: 30 * K,
     teteH: 104 * K, teteR: 62.5 * K, teteArrondi: 22 * K,
@@ -432,7 +435,7 @@
   FIG.yHanche = FIG.jambeH; FIG.yTorse = FIG.yHanche + FIG.hancheH; FIG.yCou = FIG.yTorse + FIG.torseH; FIG.yTete = FIG.yCou + FIG.couH;
   function geoTorseFig() {
     return geo('torseFig', () => {
-      const g = new THREE.BoxGeometry(FIG.largeur, FIG.torseH, FIG.prof * 0.92, 4, 4, 1);
+      const g = new THREE.BoxGeometry(FIG.largeur, FIG.torseH, FIG.prof * 1.01, 4, 4, 1);
       const p = g.attributes.position;
       for (let i = 0; i < p.count; i++) { const k = (p.getY(i) + FIG.torseH / 2) / FIG.torseH; p.setX(i, p.getX(i) * (1 - (1 - FIG.torseHaut / FIG.largeur) * k)); }
       g.computeVertexNormals(); return g;
@@ -555,10 +558,11 @@
     return main;
   }
   // Bras moulé d'une seule pièce, comme sur le plan : épaule arrondie au ras du haut du torse, bras qui
-  // longe le flanc en s'écartant, léger coude vers l'avant, manchette à 85 % de la hauteur du torse.
+  // longe le flanc en s'écartant (un peu en arrière), coude, avant-bras vers l'avant et le bas ; la main
+  // finit devant les hanches, comme de profil sur la vraie figurine.
   // Points dans le repère de l'épaule (x vers l'extérieur pour s = 1).
-  const BRAS_PTS = [[-5, 4, 0], [3, -22, -2], [13, -46, -2], [24, -80, 1], [31, -106, 9]];
-  const BRAS_R = t => (23.5 + 1.8 * t) * K;
+  const BRAS_PTS = [[-5, 0, 0], [4, -32, -5], [15, -64, -8], [24, -92, -4], [29, -110, 10], [32, -123, 27]];
+  const BRAS_R = t => (t < 0.45 ? 26 - 2.5 * Math.sin(t / 0.45 * Math.PI / 2) : 23.5 + 1.3 * (t - 0.45) / 0.55) * K; // épaule plus ronde
   function geoBras(s) {
     return geo('bras' + s, () => geoTubeVariable(BRAS_PTS.map(([x, y, z]) => new THREE.Vector3(s * x * K, y * K, z * K)), BRAS_R, 40, 28));
   }
@@ -575,17 +579,30 @@
     mainFig(b, s, mMain, fin.clone().addScaledVector(dir, -3 * K), dir);
     return b;
   }
-  /** Jambe vue de profil (repère y vers le haut, z vers l'avant) : haut de cuisse arrondi vers l'avant,
-   *  dos droit. Extrudée sur la largeur de la jambe, arêtes adoucies. */
-  function geoCuisse(larg, h, prof, rc) {
-    return geo('cuisse' + [larg, h, prof, rc].map(v => (v / K).toFixed(1)).join(','), () => {
-      const b = 3 * K, zf = prof / 2 - b, zb = -prof / 2 + b, yb = b, yh = h - b, r = rc - b;
-      const sh = new THREE.Shape();
-      sh.moveTo(zb, yb); sh.lineTo(zf, yb); sh.lineTo(zf, yh - r);
-      sh.absarc(zf - r, yh - r, r, 0, Math.PI / 2, false);
-      sh.lineTo(zb, yh); sh.lineTo(zb, yb);
-      const g = new THREE.ExtrudeGeometry(sh, { depth: larg - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 3, curveSegments: 24 });
-      g.translate(0, 0, -(larg - 2 * b) / 2); g.rotateY(-Math.PI / 2); g.computeVertexNormals();
+  /** Profil de jambe (repère y vers le haut depuis la semelle, z vers l'avant depuis l'axe du torse),
+   *  relevé sur la figurine en bois : dos droit, pied qui avance en biais, marche, tibia en retrait,
+   *  cuisse bombée autour de l'axe de hanche. yMax coupe le profil (bande intérieure sous l'encoche en U).
+   *  Le biseau (b) élargit le contour : les cotes sont données sans lui. */
+  function geoJambe(larg, yMax) {
+    const kk = v => v * K;
+    return geo('jambe' + (larg / K).toFixed(1) + ',' + (yMax ? (yMax / K).toFixed(1) : 'h'), () => {
+      const b = 2.5, H = FIG.jambeH / K, sh = new THREE.Shape(), P = (z, y) => new THREE.Vector2(kk(z), kk(y));
+      sh.moveTo(kk(-41 + b), kk(b));
+      sh.lineTo(kk(59 - b), kk(b));                 // semelle
+      sh.lineTo(kk(57 - b), kk(22));                // pied, avant en biais
+      sh.lineTo(kk(47 - b), kk(69 - b));
+      sh.lineTo(kk(26 - b), kk(69 - b));            // marche du pied
+      const yc = yMax ? yMax / K : null;
+      if (yc && yc < 103) { sh.lineTo(kk(26 - b), kk(yc - b)); sh.lineTo(kk(-41 + b), kk(yc - b)); }
+      else {
+        sh.lineTo(kk(26 - b), kk(103));             // tibia
+        sh.quadraticCurveTo(kk(43 - b), kk(112), kk(43 - b), kk(H - 35));   // cuisse bombée
+        sh.quadraticCurveTo(kk(43 - b), kk(H - 14), kk(37 - b), kk(H - b));
+        sh.lineTo(kk(-41 + b), kk(H - b));
+      }
+      sh.lineTo(kk(-41 + b), kk(b));
+      const g = new THREE.ExtrudeGeometry(sh, { depth: larg - 2 * kk(b), bevelEnabled: true, bevelThickness: kk(b), bevelSize: kk(b), bevelSegments: 3, curveSegments: 20 });
+      g.translate(0, 0, -(larg - 2 * kk(b)) / 2); g.rotateY(-Math.PI / 2); g.computeVertexNormals();
       return g;
     });
   }
@@ -611,31 +628,32 @@
     const mT = plastique(mod(cTorse), { mat: terne }), mJ = plastique(mod(cJambes), { mat: terne }), mH = plastique(mod(cTete), { mat: terne });
     const mSillon = plastique(mod(teinte(cJambes, -0.3)), { mat: terne });
     const racineG = new THREE.Group(), corps = groupe(racineG);
-    // hanches, languette centrale entre les jambes (encoche en U), jambes : cuisse arrondie vers l'avant,
-    // tibia droit, pied, creux ronds au dos (vue arrière du brevet)
-    const mCreux = plastique(mod(teinte(cJambes, -0.55)), { mat: true });
+    // hanches, languette centrale entre les jambes (encoche en U), jambes de profil (cuisse bombée,
+    // tibia en retrait, pied qui avance), creux ronds au dos (vue arrière du brevet)
+    const mCreux = plastique(mod(teinte(cJambes, -0.55)), { mat: true }), mDos = plastique(mod(teinte(cJambes, -0.2)), { mat: true });
     const hanche = bloc(corps, FIG.largeur, FIG.hancheH, FIG.prof, mJ, 0, FIG.yHanche + FIG.hancheH / 2, 0, 4 * K);
     const hauteurU = FIG.jambeH * 0.42, largU = 16 * K;
-    const lang = new THREE.Mesh(geoLanguette(largU - 2 * K, hauteurU, FIG.prof * 0.7), mJ); lang.position.set(0, FIG.yHanche + 1 * K, -4 * K); corps.add(lang);
-    boite(corps, largU - 1 * K, hauteurU, FIG.prof * 0.66, mCreux, 0, FIG.yHanche - hauteurU / 2 + 1 * K, -9 * K); // fond de l'encoche
+    const lang = new THREE.Mesh(geoLanguette(largU - 2 * K, hauteurU, FIG.prof * 0.7), mJ); lang.position.set(0, FIG.yHanche + 1 * K, -12 * K); corps.add(lang);
+    boite(corps, largU - 1 * K, hauteurU, FIG.prof * 0.66, mCreux, 0, FIG.yHanche - hauteurU / 2 + 1 * K, -16 * K); // fond de l'encoche
     const xJ = (FIG.jambeL + FIG.ecart) / 2, retrait = (largU - FIG.ecart) / 2;
-    const jG = groupe(corps, -xJ, FIG.yHanche, 0), jD = groupe(corps, xJ, FIG.yHanche, 0);
+    // chaque jambe pivote autour de l'axe de hanche (35 sous le haut de la jambe), comme la vraie pièce
+    const AXE = 35 * K;
+    const jG = groupe(corps, -xJ, FIG.yHanche - AXE, 0), jD = groupe(corps, xJ, FIG.yHanche - AXE, 0);
     for (const [j, s] of [[jG, -1], [jD, 1]]) {
-      const hTibia = FIG.jambeH * 0.6, hCuisse = FIG.jambeH - hTibia + 4 * K;
-      // tibia + pied pleine largeur ; cuisse rétrécie côté intérieur pour ouvrir l'encoche
-      bloc(j, FIG.jambeL, hTibia - FIG.piedH, FIG.prof, mJ, 0, -FIG.jambeH + FIG.piedH + (hTibia - FIG.piedH) / 2, 0, 4 * K);
-      bloc(j, FIG.jambeL, FIG.piedH, FIG.prof * 1.04, mJ, 0, -FIG.jambeH + FIG.piedH / 2, 0.01 * K, 4 * K);
-      boite(j, FIG.jambeL * 0.98, 1.5 * K, FIG.prof * 1.06, mSillon, 0, -FIG.jambeH + FIG.piedH, 0);
-      const cuisse = new THREE.Mesh(geoCuisse(FIG.jambeL - retrait, hCuisse, FIG.prof, 40 * K), mJ);
-      cuisse.position.set(s * retrait / 2, -hCuisse, 0); j.add(cuisse);
-      // creux rond au dos de la jambe
-      const creux = cyl(j, 19 * K, 19 * K, 1 * K, 28, mCreux, 0, -FIG.jambeH * 0.62, -FIG.prof / 2 - 0.2 * K); creux.rotation.x = Math.PI / 2;
+      const jc = groupe(j, 0, AXE - FIG.jambeH, 0); // repère : semelle en y = 0
+      const ext = new THREE.Mesh(geoJambe(FIG.jambeL - retrait), mJ); ext.position.x = s * retrait / 2; jc.add(ext);
+      const int = new THREE.Mesh(geoJambe(retrait + 0.5 * K, FIG.jambeH - hauteurU), mJ); int.position.x = -s * (FIG.jambeL - retrait) / 2; jc.add(int);
+      // dos de la jambe : deux grands creux ronds, celui du haut entamé par les hanches (vue arrière)
+      for (const yC of [35 * K, FIG.jambeH - 12 * K]) {
+        const fond = cyl(jc, 30 * K, 30 * K, 0.8 * K, 40, mDos, 0, yC, -41.2 * K); fond.rotation.x = Math.PI / 2;
+        const rebord = new THREE.Mesh(geo('rebordDos2', () => new THREE.TorusGeometry(30 * K, 1.4 * K, 8, 56)), mCreux); rebord.position.set(0, yC, -41.4 * K); jc.add(rebord);
+      }
     }
     // torse trapézoïdal, cou
     const torse = new THREE.Mesh(geoTorseFig(), mT); torse.position.set(0, FIG.yTorse + FIG.torseH / 2, 0); corps.add(torse);
     const cou = cyl(corps, FIG.couR, FIG.couR, FIG.couH + 0.01, 28, mH, 0, FIG.yCou + FIG.couH / 2, 0);
     // bras, attachés en haut des flancs du torse
-    const yEpaule = FIG.yTorse + FIG.torseH - 28 * K, xEpaule = FIG.torseHaut / 2 + 12 * K;
+    const yEpaule = FIG.yTorse + FIG.torseH - 36 * K, xEpaule = FIG.torseHaut / 2 + 12 * K;
     const bG = groupe(corps, -xEpaule, yEpaule, 0), bD = groupe(corps, xEpaule, yEpaule, 0);
     const mManche = plastique(mod(teinte(cTorse, -0.55)), { mat: true });
     brasFig(bG, -1, mT, mH, mManche); brasFig(bD, 1, mT, mH, mManche);
@@ -671,11 +689,12 @@
     bloc(corps, 40 * K, 30 * K, 40 * K, mO, 0, FIG.yHanche + 26 * K, -8 * K, 6 * K);
     const xJ = (FIG.jambeL + FIG.ecart) / 2;
     const jG = groupe(corps, -xJ, FIG.yHanche, 0), jD = groupe(corps, xJ, FIG.yHanche, 0);
+    const kJ = FIG.jambeH / (153 * K); // os dessinés pour des jambes de 153, mis à l'échelle
     for (const j of [jG, jD]) {
       const hanche = cyl(j, 24 * K, 24 * K, 66 * K, 20, mO, 0, -10 * K, 0); hanche.rotation.z = Math.PI / 2;
-      cyl(j, 17 * K, 19 * K, 50 * K, 18, mO, 0, -42 * K, 0);
-      const genou = cyl(j, 25 * K, 25 * K, 62 * K, 22, mO, 0, -76 * K, 4 * K); genou.rotation.z = Math.PI / 2;
-      cyl(j, 16 * K, 18 * K, 34 * K, 18, mO, 0, -104 * K, 0);
+      cyl(j, 17 * K, 19 * K, 50 * K * kJ, 18, mO, 0, -42 * K * kJ, 0);
+      const genou = cyl(j, 25 * K, 25 * K, 62 * K, 22, mO, 0, -76 * K * kJ, 4 * K); genou.rotation.z = Math.PI / 2;
+      cyl(j, 16 * K, 18 * K, 34 * K * kJ, 18, mO, 0, -104 * K * kJ, 0);
       bloc(j, 84 * K, 30 * K, 92 * K, mO, 0, -FIG.jambeH + 15 * K, 6 * K, 7 * K);
       for (let k = 0; k < 4; k++) bloc(j, 16 * K, 16 * K, 26 * K, mO, (-27 + k * 18) * K, -FIG.jambeH + 8 * K, 58 * K, 5 * K);
     }
