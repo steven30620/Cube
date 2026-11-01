@@ -1115,7 +1115,7 @@
       const dist = Math.hypot(tx - o.x, tz - o.z);
       o.x += (tx - o.x) * Math.min(1, dt * 10); o.z += (tz - o.z) * Math.min(1, dt * 10);
       o.fig.racine.position.set(o.x, 0, o.z); o.fig.racine.rotation.y = +d.a || 0;
-      if (d.mort) { o.fig.racine.rotation.x = -Math.PI / 2; o.fig.racine.position.y = 0.2; }
+      if (d.mort) { o.fig.racine.rotation.x = -Math.PI / 2; o.fig.racine.position.y = 0.2; if (o.fig.expression) o.fig.expression('peur'); }
       else { o.pas += dist * 3; o.fig.animer(o.pas, Math.min(1, dist * 8)); }
       const b = J.bulles.get(auteur); if (b && Date.now() - b.t < 6000) { if (!o.bulle || o.bulleTxt !== b.txt) { if (o.bulle) o.fig.racine.remove(o.bulle); o.bulle = etiquette(b.txt, true); o.bulleTxt = b.txt; o.fig.racine.add(o.bulle); } } else if (o.bulle) { o.fig.racine.remove(o.bulle); o.bulle = null; }
     }
@@ -1444,6 +1444,7 @@
   function mourir(cause, t, piege) {
     const jo = J.joueur; if (!jo.vivant) return;
     jo.vivant = false; J.mortAnim = t; J.causeMort = cause; J.piegeMort = piege || null;
+    if (J.figJoueur && J.figJoueur.expression) J.figJoueur.expression('peur');
     preparerRalenti(t);
     A.jouer('mort');
     $('#invite').hidden = true; fermerPanneaux();
@@ -1563,6 +1564,7 @@
     fig.racine.position.set(e.x, 0.2 * chute, e.z);
     fig.racine.rotation.set(-chute * Math.PI / 2, e.a, 0);
     if (tr < rp.tFin) fig.animer(e.pas, e.v); else fig.animer(0, 0);
+    if (fig.expression) fig.expression(tr >= rp.tFin - 450 ? 'peur' : 'normal'); // il voit le piège une demi-seconde avant
     if (tr >= rp.tFin && !rp.sonMort) { rp.sonMort = true; A.jouer('mort', 0.6); }
     // caméra basse qui tourne lentement autour du personnage, gardée dans la salle
     const th = rp.a0 + ecoule / 1000 * 0.16, d = 5.6;
@@ -1578,6 +1580,7 @@
     rp.fini = true; delete document.body.dataset.ralenti;
     camera.fov = 46; camera.updateProjectionMatrix();
     const fig = J.figJoueur;
+    if (fig.expression) fig.expression('peur');
     fig.racine.position.set(rp.mort.x, 0.2, rp.mort.z);
     fig.racine.rotation.set(-Math.PI / 2, rp.mort.a, 0);
   }

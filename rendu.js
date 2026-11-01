@@ -338,8 +338,8 @@
       x.fillStyle = '#ffffff'; x.fillRect(0, 0, w, h);
       const cx = w / 2;
       if (type === 'crane') {
-        // repère « carré » : 1 unité = 1 px de hauteur ; le tour de tête vaut ~ 2,16 fois plus en largeur
-        x.save(); x.setTransform(0.463, 0, 0, 1, cx, 0);
+        // repère « carré » : 1 unité = 1 px de hauteur, compressé selon le rapport tour de tête / hauteur
+        x.save(); x.setTransform((w / h) / (TAU * FIG.teteR / FIG.teteH), 0, 0, 1, cx, 0);
         x.fillStyle = '#111111';
         x.beginPath(); x.arc(-46, 100, 32, 0, TAU); x.fill(); x.beginPath(); x.arc(46, 100, 32, 0, TAU); x.fill();
         x.beginPath(); x.moveTo(-10, 140); x.lineTo(10, 140); x.lineTo(0, 158); x.closePath(); x.fill();
@@ -416,6 +416,8 @@
   // ---------------------------------------------------------------------
   // Figurine de brique, proportions relevées sur le modèle fourni (vue de face, 473 px de haut) :
   // jambes 153, hanches 22, torse 160 (150 → 190 de large), cou 12, tête 104 × 143, tenon 23 × 62.
+  // Recalée ensuite sur le plan coté de la vraie pièce (1 mm = 12,24 unités) : tête 10,2 × 8,5 mm
+  // (125 × 104, coins R2), hanches 15,4 mm (190), mains Ø 5,1 mm percées Ø 3,1 mm, tenon creux Ø 4,9 mm.
   // 1 px = K unités ; la figurine est ensuite agrandie de 1,3 (corps.scale).
   // ---------------------------------------------------------------------
   const K = 0.0037;
@@ -424,7 +426,7 @@
     hancheH: 22 * K, largeur: 190 * K,
     torseH: 160 * K, torseHaut: 150 * K,
     couH: 12 * K, couR: 30 * K,
-    teteH: 104 * K, teteR: 71.5 * K, teteArrondi: 18 * K,
+    teteH: 104 * K, teteR: 62.5 * K, teteArrondi: 22 * K,
     tenonH: 23 * K, tenonR: 31 * K,
   };
   FIG.yHanche = FIG.jambeH; FIG.yTorse = FIG.yHanche + FIG.hancheH; FIG.yCou = FIG.yTorse + FIG.torseH; FIG.yTete = FIG.yCou + FIG.couH;
@@ -449,43 +451,152 @@
       return g;
     });
   }
-  const geoTenonFig = () => geo('tenonFig', () => {
-    const r = FIG.tenonR, h = FIG.tenonH, b = h * 0.18;
-    return new THREE.LatheGeometry([[0.0001, 0], [r, 0], [r, h - b], [r - b * 0.6, h - b * 0.25], [r - b, h], [0.0001, h]].map(([a, c]) => new THREE.Vector2(a, c)), 32);
+  /** Tenon du dessus de la tête : creux, comme sur la vraie pièce (Ø 4,9 mm, trou ≈ Ø 3,2 mm). */
+  const geoTenonFig = () => geo('tenonFig2', () => {
+    const r = 30 * K, h = FIG.tenonH, b = h * 0.18, ri = r * 0.64, d = h * 0.62;
+    return new THREE.LatheGeometry([[0.0001, 0], [r, 0], [r, h - b], [r - b * 0.6, h - b * 0.25], [r - b, h], [ri + b * 0.5, h], [ri, h - b * 0.5], [ri, h - d], [0.0001, h - d]].map(([a, c]) => new THREE.Vector2(a, c)), 36);
   });
-  // main en C : anneau vu de face, ouverture tournée vers le corps et un peu vers le haut
-  /** Main de brique : pince en C épaisse (secteur d'anneau extrudé, faces plates, arêtes adoucies),
-   *  ouverture d'environ 70° centrée sur l'axe +x, trou traversant comme sur la vraie pièce. */
-  const geoMainFig = () => geo('mainFig2', () => {
-    const Ro = 28.5 * K, Ri = 16.5 * K, ouverture = 1.9, a0 = ouverture / 2, a1 = TAU - ouverture / 2;
+  // ---------------------------------------------------------------------
+  // Visage imprimé, façon dessin animé de briques : yeux ovales noirs avec un reflet blanc,
+  // sourcils épais, bouche expressive. Posé en décalcomanie sur l'avant de la tête (bande
+  // cylindrique de 126°, partie droite de la tête) pour rester net même en gros plan.
+  // Encre claire sur les têtes sombres, sinon le visage disparaîtrait.
+  // ---------------------------------------------------------------------
+  // Coordonnées en unités K depuis le centre de la tête (x le long du tour de tête, y vers le haut).
+  const VIS_W = 512, VIS_H = 220, VIS_HT = () => FIG.teteH - 2 * FIG.teteArrondi, VIS_U = () => VIS_H / VIS_HT();
+  function texVisageImprime(type, clair) {
+    return toile('visI' + type + (clair ? 'c' : 'f'), VIS_W, VIS_H, (x, w) => {
+      x.clearRect(0, 0, w, VIS_H);
+      const u = VIS_U() * K, X = k => w / 2 + k * u, Y = k => VIS_H / 2 - k * u;
+      const encre = clair ? '#efeae0' : '#15110d', reflet = clair ? '#1b1b1d' : '#ffffff';
+      const peur = type === 'peur';
+      x.lineCap = 'round'; x.lineJoin = 'round';
+      for (const s of [-1, 1]) {
+        // œil : point noir légèrement ovale, à 3,8 mm sous le haut de la tête, reflet blanc comme dans le dessin animé
+        const ex = s * 20.5, ey = 5.5, rx = peur ? 6.4 : 5.6, ry = peur ? 7.4 : 6.4;
+        x.fillStyle = encre; x.beginPath(); x.ellipse(X(ex), Y(ey), rx * u, ry * u, 0, 0, TAU); x.fill();
+        x.fillStyle = reflet; x.beginPath(); x.arc(X(ex - 1.8), Y(ey + 2.3), 1.9 * u, 0, TAU); x.fill();
+        if (peur) { // sourcils relevés côté nez
+          x.strokeStyle = encre; x.lineWidth = 3.6 * u; x.beginPath();
+          x.moveTo(X(s * 9), Y(23)); x.quadraticCurveTo(X(s * 20), Y(23), X(s * 31), Y(16)); x.stroke();
+        }
+      }
+      x.fillStyle = encre; x.strokeStyle = encre;
+      if (peur) { // bouche grande ouverte, rangée de dents du haut
+        x.beginPath(); x.moveTo(X(-15), Y(-13)); x.quadraticCurveTo(X(0), Y(-10), X(15), Y(-13)); x.quadraticCurveTo(X(17), Y(-28.5), X(0), Y(-29)); x.quadraticCurveTo(X(-17), Y(-28.5), X(-15), Y(-13)); x.fill();
+        x.fillStyle = reflet; x.beginPath(); x.moveTo(X(-12.5), Y(-14)); x.quadraticCurveTo(X(0), Y(-11.5), X(12.5), Y(-14)); x.lineTo(X(12.3), Y(-17.5)); x.quadraticCurveTo(X(0), Y(-15.5), X(-12.3), Y(-17.5)); x.closePath(); x.fill();
+      } else { // sourire classique, aussi large que l'écart des yeux
+        x.lineWidth = 3.4 * u; x.beginPath(); x.moveTo(X(-19), Y(-15)); x.quadraticCurveTo(X(0), Y(-32), X(19), Y(-15)); x.stroke();
+      }
+    });
+  }
+  const geoVisage = () => geo('visage', () => {
+    const r = FIG.teteR + 0.6 * K, h = VIS_HT(), arc = VIS_W / VIS_H * h / FIG.teteR;
+    return new THREE.CylinderGeometry(r, r, h, 40, 1, true, -arc / 2, arc);
+  });
+  const cVisages = new Map();
+  function matVisage(type, clair) {
+    const k = type + (clair ? 'c' : 'f');
+    let m = cVisages.get(k);
+    if (!m) {
+      m = new THREE.MeshPhysicalMaterial({ map: texVisageImprime(type, clair), transparent: true, depthWrite: false, roughness: 0.32, metalness: 0, clearcoat: 0.8, clearcoatRoughness: 0.16, envMapIntensity: 1.1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      cVisages.set(k, m);
+    }
+    return m;
+  }
+  /** Luminance relative (linéaire) : sous 0,065, l'encre noire ne se lit plus (noir, marine, bordeaux, chocolat…). */
+  const luminance = c => { const l = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; const [r, g, b] = rgb(c); return 0.2126 * l(r) + 0.7152 * l(g) + 0.0722 * l(b); };
+  /** Main de brique (plan coté) : pince en C Ø 5,1 mm percée Ø 3,1 mm, épaisse d'environ 3 mm, fente
+   *  d'environ 85° centrée sur l'axe +x, arêtes bien arrondies. Le biseau élargit le contour :
+   *  rayon extérieur réel 31, trou 19 (unités du modèle). */
+  const geoMainFig = () => geo('mainFig4', () => {
+    const b = 4 * K, Ro = 27 * K, Ri = 23 * K, ouverture = 1.5, a0 = ouverture / 2, a1 = TAU - ouverture / 2;
     const sh = new THREE.Shape();
     sh.absarc(0, 0, Ro, a0, a1, false);
     sh.absarc(0, 0, Ri, a1, a0, true);
     sh.closePath();
-    const ep = 22 * K, b = 3.2 * K;
-    const g = new THREE.ExtrudeGeometry(sh, { depth: ep - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: 2.4 * K, bevelSegments: 4, curveSegments: 40 });
-    g.translate(0, 0, -(ep - 2 * b) / 2); g.computeVertexNormals();
+    const ep = 38 * K, bz = 6 * K;
+    const g = new THREE.ExtrudeGeometry(sh, { depth: ep - 2 * bz, bevelEnabled: true, bevelThickness: bz, bevelSize: b, bevelSegments: 5, curveSegments: 44 });
+    g.translate(0, 0, -(ep - 2 * bz) / 2); g.computeVertexNormals();
     return g;
   });
-  /** Pose d'une main : ouverture tournée vers le corps et un peu vers le haut, pince inclinée vers l'avant. */
-  function poserMain(main, s) {
-    main.position.set(s * 24 * K, -62 * K, 30 * K);
-    main.rotation.set(-0.25, s * 0.15, s < 0 ? -0.6 : Math.PI + 0.6);
+  /** Tube de rayon variable le long d'une courbe (bras moulé d'une seule pièce). */
+  function geoTubeVariable(points, rayon, nSeg, nRad) {
+    const courbe = new THREE.CatmullRomCurve3(points, false, 'centripetal');
+    const fr = courbe.computeFrenetFrames(nSeg, false);
+    const pos = [], nor = [], idx = [];
+    for (let i = 0; i <= nSeg; i++) {
+      const P = courbe.getPointAt(i / nSeg), N = fr.normals[i], B = fr.binormals[i], r = rayon(i / nSeg);
+      for (let j = 0; j <= nRad; j++) {
+        const v = j / nRad * TAU, sn = Math.sin(v), cs = -Math.cos(v);
+        const nx = cs * N.x + sn * B.x, ny = cs * N.y + sn * B.y, nz = cs * N.z + sn * B.z;
+        pos.push(P.x + r * nx, P.y + r * ny, P.z + r * nz); nor.push(nx, ny, nz);
+      }
+    }
+    for (let i = 1; i <= nSeg; i++) for (let j = 1; j <= nRad; j++) {
+      const a = (nRad + 1) * (i - 1) + (j - 1), b = (nRad + 1) * i + (j - 1), c = (nRad + 1) * i + j, d = (nRad + 1) * (i - 1) + j;
+      idx.push(a, b, d, b, c, d);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setIndex(idx); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    return { g, courbe };
   }
-  /** Un bras : épaule arrondie, bras qui s'écarte légèrement, avant-bras vers l'avant, main en C. */
-  function brasFig(b, s, m, mMain) {
-    sph(b, 30 * K, m, 0, 0, 0, 24);
-    const coude = new THREE.Vector3(s * 24 * K, -88 * K, 0);
-    const haut = cyl(b, 27 * K, 29 * K, 92 * K, 24, m, coude.x / 2, coude.y / 2, 0); haut.rotation.z = Math.atan2(coude.x, -coude.y);
-    const gc = groupe(b, coude.x, coude.y, 0);
-    sph(gc, 28 * K, m, 0, 0, 0, 24);
-    const avant = cyl(gc, 27 * K, 24 * K, 46 * K, 24, m, s * 4 * K, -19 * K, 13 * K); avant.rotation.x = -0.6;
-    const poignet = cyl(gc, 9.5 * K, 9.5 * K, 20 * K, 14, mMain, s * 13 * K, -44 * K, 26 * K); poignet.rotation.set(-0.6, 0, s * 0.5); // poignet qui entre dans la main
-    const main = new THREE.Mesh(geoMainFig(), mMain);
-    poserMain(main, s);
-    gc.add(main);
-    return gc;
+  /** Main au bout d'un bras : le poignet sort de la manchette dans l'axe de l'avant-bras (dir), la main pend
+   *  dessous, le C vu de face (axe vers l'avant, un peu relevé), ouverture vers le bas, à peine vers le corps. */
+  function mainFig(parent, s, m, bout, dir) {
+    const gp = groupe(parent, bout.x, bout.y, bout.z);
+    const g = Math.asin(Math.max(-1, Math.min(1, dir.x)));
+    gp.rotation.set(Math.atan2(-dir.z, -dir.y), 0, g);
+    cyl(gp, 10 * K, 10 * K, 14 * K, 14, m, 0, -4 * K, 0);
+    const main = new THREE.Mesh(geoMainFig(), m);
+    main.position.set(0, -34 * K, 0);
+    main.rotation.set(0, 0, -Math.PI / 2 - g - s * 0.2);
+    gp.add(main);
+    return main;
   }
+  // Bras moulé d'une seule pièce, comme sur le plan : épaule arrondie au ras du haut du torse, bras qui
+  // longe le flanc en s'écartant, léger coude vers l'avant, manchette à 85 % de la hauteur du torse.
+  // Points dans le repère de l'épaule (x vers l'extérieur pour s = 1).
+  const BRAS_PTS = [[-5, 4, 0], [3, -22, -2], [13, -46, -2], [24, -80, 1], [31, -106, 9]];
+  const BRAS_R = t => (23.5 + 1.8 * t) * K;
+  function geoBras(s) {
+    return geo('bras' + s, () => geoTubeVariable(BRAS_PTS.map(([x, y, z]) => new THREE.Vector3(s * x * K, y * K, z * K)), BRAS_R, 40, 28));
+  }
+  /** Un bras : pièce courbée, épaule en dôme, manchette creuse, main en C. */
+  function brasFig(b, s, m, mMain, mCreux) {
+    const { g, courbe } = geoBras(s);
+    b.add(new THREE.Mesh(g, m));
+    const p0 = courbe.getPointAt(0); sph(b, BRAS_R(0), m, p0.x, p0.y, p0.z, 28);
+    // manchette : léger bourrelet et trou sombre où entre le poignet
+    const fin = courbe.getPointAt(1), dir = courbe.getTangentAt(1).normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    const bord = cyl(b, BRAS_R(1) + 0.8 * K, BRAS_R(1) + 0.8 * K, 5 * K, 28, m, fin.x - dir.x * 2.5 * K, fin.y - dir.y * 2.5 * K, fin.z - dir.z * 2.5 * K); bord.quaternion.copy(q);
+    const trou = cyl(b, 14 * K, 14 * K, 0.6 * K, 20, mCreux, fin.x, fin.y, fin.z); trou.quaternion.copy(q);
+    mainFig(b, s, mMain, fin.clone().addScaledVector(dir, -3 * K), dir);
+    return b;
+  }
+  /** Jambe vue de profil (repère y vers le haut, z vers l'avant) : haut de cuisse arrondi vers l'avant,
+   *  dos droit. Extrudée sur la largeur de la jambe, arêtes adoucies. */
+  function geoCuisse(larg, h, prof, rc) {
+    return geo('cuisse' + [larg, h, prof, rc].map(v => (v / K).toFixed(1)).join(','), () => {
+      const b = 3 * K, zf = prof / 2 - b, zb = -prof / 2 + b, yb = b, yh = h - b, r = rc - b;
+      const sh = new THREE.Shape();
+      sh.moveTo(zb, yb); sh.lineTo(zf, yb); sh.lineTo(zf, yh - r);
+      sh.absarc(zf - r, yh - r, r, 0, Math.PI / 2, false);
+      sh.lineTo(zb, yh); sh.lineTo(zb, yb);
+      const g = new THREE.ExtrudeGeometry(sh, { depth: larg - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 3, curveSegments: 24 });
+      g.translate(0, 0, -(larg - 2 * b) / 2); g.rotateY(-Math.PI / 2); g.computeVertexNormals();
+      return g;
+    });
+  }
+  /** Pièce centrale des hanches qui descend entre les jambes : bout arrondi (encoche en U vue de face). */
+  const geoLanguette = (larg, h, prof) => geo('languette' + (larg / K) + ',' + (h / K), () => {
+    const sh = new THREE.Shape(), r = larg / 2;
+    sh.moveTo(-r, 0); sh.lineTo(-r, -h + r); sh.absarc(0, -h + r, r, Math.PI, TAU, false); sh.lineTo(r, 0); sh.lineTo(-r, 0);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: prof, bevelEnabled: false, curveSegments: 16 });
+    g.translate(0, 0, -prof / 2); g.computeVertexNormals();
+    return g;
+  });
   /** Figurine de brique classique, identique au modèle fourni. look = { unie } ou { tunique, pantalon, peau }. */
   function creerFigurine(look, opts) {
     opts = opts || {};
@@ -500,15 +611,25 @@
     const mT = plastique(mod(cTorse), { mat: terne }), mJ = plastique(mod(cJambes), { mat: terne }), mH = plastique(mod(cTete), { mat: terne });
     const mSillon = plastique(mod(teinte(cJambes, -0.3)), { mat: terne });
     const racineG = new THREE.Group(), corps = groupe(racineG);
-    // hanches (fente centrale) et jambes (couture du pied)
+    // hanches, languette centrale entre les jambes (encoche en U), jambes : cuisse arrondie vers l'avant,
+    // tibia droit, pied, creux ronds au dos (vue arrière du brevet)
+    const mCreux = plastique(mod(teinte(cJambes, -0.55)), { mat: true });
     const hanche = bloc(corps, FIG.largeur, FIG.hancheH, FIG.prof, mJ, 0, FIG.yHanche + FIG.hancheH / 2, 0, 4 * K);
-    boite(corps, 3 * K, FIG.hancheH * 0.9, FIG.prof * 1.01, mSillon, 0, FIG.yHanche + FIG.hancheH * 0.45, 0);
-    const xJ = (FIG.jambeL + FIG.ecart) / 2;
+    const hauteurU = FIG.jambeH * 0.42, largU = 16 * K;
+    const lang = new THREE.Mesh(geoLanguette(largU - 2 * K, hauteurU, FIG.prof * 0.7), mJ); lang.position.set(0, FIG.yHanche + 1 * K, -4 * K); corps.add(lang);
+    boite(corps, largU - 1 * K, hauteurU, FIG.prof * 0.66, mCreux, 0, FIG.yHanche - hauteurU / 2 + 1 * K, -9 * K); // fond de l'encoche
+    const xJ = (FIG.jambeL + FIG.ecart) / 2, retrait = (largU - FIG.ecart) / 2;
     const jG = groupe(corps, -xJ, FIG.yHanche, 0), jD = groupe(corps, xJ, FIG.yHanche, 0);
-    for (const j of [jG, jD]) {
-      bloc(j, FIG.jambeL, FIG.jambeH - FIG.piedH, FIG.prof, mJ, 0, -(FIG.jambeH - FIG.piedH) / 2, 0, 5 * K);
+    for (const [j, s] of [[jG, -1], [jD, 1]]) {
+      const hTibia = FIG.jambeH * 0.6, hCuisse = FIG.jambeH - hTibia + 4 * K;
+      // tibia + pied pleine largeur ; cuisse rétrécie côté intérieur pour ouvrir l'encoche
+      bloc(j, FIG.jambeL, hTibia - FIG.piedH, FIG.prof, mJ, 0, -FIG.jambeH + FIG.piedH + (hTibia - FIG.piedH) / 2, 0, 4 * K);
       bloc(j, FIG.jambeL, FIG.piedH, FIG.prof * 1.04, mJ, 0, -FIG.jambeH + FIG.piedH / 2, 0.01 * K, 4 * K);
       boite(j, FIG.jambeL * 0.98, 1.5 * K, FIG.prof * 1.06, mSillon, 0, -FIG.jambeH + FIG.piedH, 0);
+      const cuisse = new THREE.Mesh(geoCuisse(FIG.jambeL - retrait, hCuisse, FIG.prof, 40 * K), mJ);
+      cuisse.position.set(s * retrait / 2, -hCuisse, 0); j.add(cuisse);
+      // creux rond au dos de la jambe
+      const creux = cyl(j, 19 * K, 19 * K, 1 * K, 28, mCreux, 0, -FIG.jambeH * 0.62, -FIG.prof / 2 - 0.2 * K); creux.rotation.x = Math.PI / 2;
     }
     // torse trapézoïdal, cou
     const torse = new THREE.Mesh(geoTorseFig(), mT); torse.position.set(0, FIG.yTorse + FIG.torseH / 2, 0); corps.add(torse);
@@ -516,15 +637,22 @@
     // bras, attachés en haut des flancs du torse
     const yEpaule = FIG.yTorse + FIG.torseH - 28 * K, xEpaule = FIG.torseHaut / 2 + 12 * K;
     const bG = groupe(corps, -xEpaule, yEpaule, 0), bD = groupe(corps, xEpaule, yEpaule, 0);
-    brasFig(bG, -1, mT, mH); brasFig(bD, 1, mT, mH);
+    const mManche = plastique(mod(teinte(cTorse, -0.55)), { mat: true });
+    brasFig(bG, -1, mT, mH, mManche); brasFig(bD, 1, mT, mH, mManche);
     // tête lisse et tenon
     const tete = groupe(corps, 0, FIG.yTete + FIG.teteH / 2, 0);
     tete.add(new THREE.Mesh(geoTeteFig(), mH));
     const tenon = new THREE.Mesh(geoTenonFig(), mH); tenon.position.y = FIG.teteH / 2 - 0.004; tete.add(tenon);
+    // visage imprimé (encre claire sur une tête sombre)
+    const clair = luminance(mod(cTete)) < 0.065;
+    const visage = new THREE.Mesh(geoVisage(), matVisage(opts.visage || 'normal', clair)); tete.add(visage);
     if (opts.objetMain) { const l = boite(bD, 0.05, 0.05, 0.9, M.acier(), 0.07, -0.56, 0.4); l.rotation.x = 0.1; }
     corps.scale.setScalar(1.3);
     racineG.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    const f = { racine: racineG, corps, jG, jD, bG, bD, tete, hanche, cou, torse };
+    visage.castShadow = false; visage.userData.pasOmbre = true;
+    const f = { racine: racineG, corps, jG, jD, bG, bD, tete, hanche, cou, torse, visage };
+    /** Change l'expression imprimée : 'normal' ou 'peur'. */
+    f.expression = type => { visage.material = matVisage(type, clair); };
     f.animer = (pas, vitesse) => {
       const a = Math.sin(pas) * 0.7 * vitesse;
       jG.rotation.x = a; jD.rotation.x = -a; bG.rotation.x = -a * 0.9; bD.rotation.x = a * 0.9;
@@ -572,12 +700,11 @@
     const bG = groupe(corps, -xEpaule, yEpaule, 0), bD = groupe(corps, xEpaule, yEpaule, 0);
     for (const [b, s] of [[bG, -1], [bD, 1]]) {
       bloc(b, 56 * K, 48 * K, 64 * K, mO, s * 8 * K, 4 * K, 0, 14 * K); // épaulette arrondie
-      const haut = cyl(b, 20 * K, 22 * K, 80 * K, 18, mO, s * 14 * K, -50 * K, 0); haut.rotation.z = s * 0.27;
-      const gc = groupe(b, s * 24 * K, -88 * K, 0);
+      const haut = cyl(b, 20 * K, 22 * K, 80 * K, 18, mO, s * 16 * K, -48 * K, 0); haut.rotation.z = s * 0.33;
+      const gc = groupe(b, s * 30 * K, -88 * K, 0);
       sph(gc, 23 * K, mO, 0, 0, 0, 18);
-      const avant = cyl(gc, 19 * K, 18 * K, 46 * K, 18, mO, s * 4 * K, -19 * K, 13 * K); avant.rotation.x = -0.6;
-      cyl(gc, 9 * K, 9 * K, 20 * K, 12, mO, s * 13 * K, -44 * K, 26 * K).rotation.set(-0.6, 0, s * 0.5);
-      const main = new THREE.Mesh(geoMainFig(), mO); poserMain(main, s); gc.add(main);
+      const avant = cyl(gc, 19 * K, 18 * K, 46 * K, 18, mO, s * 4 * K, -21 * K, 9 * K); avant.rotation.x = -0.35;
+      mainFig(gc, s, mO, new THREE.Vector3(s * 4 * K, -42.6 * K, 17 * K), new THREE.Vector3(s * 0.15, -0.93, 0.33).normalize());
     }
     // crâne imprimé
     const tete = groupe(corps, 0, FIG.yTete + FIG.teteH / 2, 0);
