@@ -91,3 +91,12 @@ le Cube est un artefact autonome (captifs, Coffre Or / Or Noir / Jetons, export 
   Abonator, tout en français, `enigmes.js` généré depuis le document Word, vérifications, fichier
   unique `Cube.html` et artefact après chaque modification, format des commits, avance rapide de
   `main` sans force-push. Rien ne change en jeu.
+- [x] Fusion dans le Bureau (« fusionne cube dans Evergreen Private Assistance, 9e étage juste entre
+  Gestion des chambres et Personnel & finances », fichier `bureau_guest1-473.html`) : nouvelle rubrique
+  « Le Cube des Mille Supplices » à cet endroit, bouton « Entrer dans le Cube » qui ouvre le jeu en
+  plein écran par-dessus l'hôtel, « ← Retour à Evergreen » pour revenir (la tentative en cours est
+  sauvegardée). L'hôtel est compressé dans le Bureau : `fusionner-bureau.py` le décompresse, ajoute la
+  rubrique et une copie de `Cube.html`, puis le recompresse ; le reste du Bureau est inchangé octet pour
+  octet. Le Cube garde ses propres sauvegardes et monnaies (pas encore reliées aux PON ni aux détenus
+  d'Evergreen). Vérifié en Chrome sans tête : ordre des rubriques, démarrage, partie lancée (rendu 3D),
+  retour, sauvegarde, réouverture ; aucune erreur JavaScript. Bureau : 28,1 → 28,5 Mo.

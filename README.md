@@ -15,6 +15,7 @@ Le jeu tourne comme **artefact Claude** (claude.ai) ou en **fichier unique** jou
 | `enigmes.js` | les 200 énigmes des verrous — **généré**, ne pas modifier à la main |
 | `importer-enigmes.py` | `python importer-enigmes.py chemin/vers/200_enigmes_mathematiques_Asie_antique.docx` → `enigmes.js` |
 | `fichier-unique.py` | `python fichier-unique.py chemin/vers/three.min.js Cube.html` → un seul fichier jouable hors ligne |
+| `fusionner-bureau.py` | `python fusionner-bureau.py bureau.html Cube.html sortie.html` → le Cube jouable dans le Bureau (Hôtel du Serpent, 9e étage, Evergreen) ; relancé sur un Bureau déjà fusionné, remplace la copie du Cube |
 | `test-enigmes.js` | `node test-enigmes.js` : chaque réponse ouvre son verrou, répartition par zone |
 
 three.js r128 : https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js
