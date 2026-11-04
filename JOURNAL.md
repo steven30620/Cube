@@ -1,6 +1,6 @@
 # Journal — Le Cube des Mille Supplices
 
-Historique des demandes et de ce qui a été fait (31/10 – 01/11/2026), de la plus ancienne à la plus récente.
+Historique des demandes et de ce qui a été fait (31/10 – 04/11/2026), de la plus ancienne à la plus récente.
 
 ## Création (31/10/2026)
 
@@ -84,3 +84,10 @@ le Cube est un artefact autonome (captifs, Coffre Or / Or Noir / Jetons, export 
   sol qui se dérobe sur 5 m, pendules à lame de 2,6 m…). Résultat : 3,2 pièges par salle piégée au
   lieu de 1,7 et 21,7 % du sol mortel en moyenne (31 % au fond). Équité : plus de fosse cachée devant
   une porte ; un joueur parfait franchit 143 salles testées sur 144 (139 avant).
+
+## Consignes de travail (04/11/2026)
+
+- [x] `CLAUDE.md` (« s'il n'y a pas de CLAUDE.md, rédige-en un court ») : projet sans lien avec
+  Abonator, tout en français, `enigmes.js` généré depuis le document Word, vérifications, fichier
+  unique `Cube.html` et artefact après chaque modification, format des commits, avance rapide de
+  `main` sans force-push. Rien ne change en jeu.
